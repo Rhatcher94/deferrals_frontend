@@ -7,8 +7,7 @@ const APIService = {
             params: params
           })
           .then(function (response) {
-            data = response
-            console.log(response);
+            data = response.data
           })
           .catch(function (error) {
             console.log(error);
@@ -24,7 +23,6 @@ const APIService = {
       await axios.post(`${baseURL}${route}`, body, headers)
       .then(function (response) {
         data = response
-        console.log(response);
       })
       .catch(function (error) {
         console.log(error);
@@ -37,7 +35,6 @@ const APIService = {
       axios.put(`${baseURL}${route}`, body, headers)
       .then(function (response) {
         data = response
-        console.log(response);
       })
       .catch(function (error) {
         console.log(error);
@@ -50,7 +47,6 @@ const APIService = {
       axios.delete(`${baseURL}${route}`, body, headers)
       .then(function (response) {
         data = response
-        console.log(response);
       })
       .catch(function (error) {
         console.log(error);

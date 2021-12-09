@@ -1,58 +1,68 @@
 <script>
     import APIService from "../services/API.service"
     import { user } from "../stores"
+    import router from "page"
 
     let user_value;
     user.subscribe(value => {
 		user_value = value;
 	});
 
+    let showMessage = false
+    let loginMessage = ""
+
+    let username
+    let password
+    
     async function handleLoginClick(e){
-        await APIService.post("/api/user/login", {username: "admin7", password: "myPassword"})
+        let loginSuccess = false
+        if(username && password) {
+            let response = await APIService.post("/api/user/login", {username: username, password: password, type: "creds"})
+            if(response.status && response.status === 200) {
+                let data = response.data
+                if(data.status === "Success") {
+                    loginSuccess = true
+                } else {
+                    loginSuccess = false
+                }
+                
+                if(loginSuccess){
+                    user.update(user => user = data.data.user)
+                    localStorage.setItem("app_user", JSON.stringify(user_value));
+                    router.redirect("/home")
+                    
+                } else {
+                    showMessage = true
+                    loginMessage = "Log in Failed"
+                }
+            }
+        }
+        return loginSuccess
     }
 
 </script>
-
-<div id="login">
-    <h3 class="text-center text-white pt-5">Login form</h3>
-    <div class="container">
-        <div id="login-row" class="row justify-content-center align-items-center">
-            <div id="login-column" class="col-md-6">
-                <div id="login-box" class="col-md-12">
-                    <form id="login-form" class="form" action="" method="post" on:submit|preventDefault="{handleLoginClick}">
-                        <h3 class="text-center text-info">Login</h3>
-                        <div class="form-group">
-                            <label for="username" class="text-info">Username:</label><br>
-                            <input type="text" name="username" id="username" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="password" class="text-info">Password:</label><br>
-                            <input type="text" name="password" id="password" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="remember-me" class="text-info"><span>Remember me</span> <span><input id="remember-me" name="remember-me" type="checkbox"></span></label><br>
-                            <input type="submit" name="submit" class="btn btn-info btn-md" value="submit">
-                        </div>
-                        <div id="register-link" class="text-right">
-                            <a href="#" class="text-info">Register here</a>
-                        </div>
-                    </form>
-                </div>
+<div class="login-container">
+    <p hidden="{!showMessage}">{loginMessage}</p>
+    <form>
+        <fieldset>
+            <h3 class="text-center text-white pt-5">Login form</h3>
+            <div class="form-group">
+                <label for="exampleInputEmail1" class="form-label mt-4">Username</label>
+                <input type="text" class="form-control" id="userInput" bind:value={username} placeholder="Enter Username">
             </div>
-        </div>
-    </div>
+            <div class="form-group">
+                <label for="exampleInputPassword1" class="form-label mt-4">Password</label>
+                <input type="password" class="form-control" id="passwordInput" bind:value={password} placeholder="Password">
+            </div>
+        </fieldset>
+        <button type="submit" class="btn btn-primary mt-3" on:click|preventDefault="{handleLoginClick}">Submit</button>
+      </form>
 </div>
 
 
 <style>
-    #login .container #login-row #login-column #login-box {
-        margin-top: 120px;
-        max-width: 600px;
-        height: 320px;
-        border: 1px solid #9C9C9C;
-        background-color: #EAEAEA;
-    }
-    #login .container #login-row #login-column #login-box #login-form {
-        padding: 20px;
+    .login-container{
+        width: 50%;
+        margin: auto;
     }
 </style>
