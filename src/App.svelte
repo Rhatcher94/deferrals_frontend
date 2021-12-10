@@ -2,14 +2,18 @@
 	import NavBar from "./components/NavBar.svelte"
 	import { onMount } from 'svelte';
 	import router from "page"
+	import { user } from "./stores"
+	import {CheckNoUser, CheckForUser} from "./middleware/CheckUser"
+
+	//Pages
 	import About from "./components/About.svelte"
 	import Home from "./components/Home.svelte"
 	import NotFound from "./components/404.svelte"
 	import Login from "./components/Login.svelte"
-	import { user } from "./stores"
-	import {CheckNoUser, CheckForUser} from "./middleware/CheckUser"
+	import MyOrganization from "./components/MyOrganization.svelte"
 
 	let page 
+	router('/organization', CheckNoUser ,() => page = MyOrganization)
 	router('/about', CheckNoUser ,() => page = About)
 	router('/home', CheckNoUser ,() => page = Home)
 	router('/', CheckForUser, () => page = Login)
@@ -24,7 +28,7 @@
 </script>
 
 <main>
-	<NavBar bgColour="dark" brand="Base"/>
+	<NavBar bgColour="dark" brand="ZD"/>
 	<svelte:component this={page} />
 </main>
 

@@ -3,7 +3,24 @@
     export let brand = 'Home';
     import { user } from "../stores"
     import router from "page"
-    export let navLinks = [{name: 'Home', link: '/home'}, {name: 'About', link: '/about'}, {name: 'Contact', link: '/contact'}]
+    //Nav links based on user level
+    let navLinks = {
+      1:[
+        {name: 'Organizations', link: '/organizations'}, 
+        {name: 'Users', link: '/users'},
+        {name: 'Invoices', link: '/invoices'},
+        {name: 'My Organization', link: '/organization'}, 
+        {name: 'Organization Users', link: '/organization-users'}
+      ], 
+      2:[
+        {name: 'Invoices', link: '/invoices'},
+        {name: 'My Organization', link: '/organization'}, 
+        {name: 'Organization Users', link: '/organization-users'}
+      ],
+      3:[
+        {name: 'Invoices', link: '/invoices'}, 
+      ],
+    }
 
     let user_value;
     user.subscribe(value => {
@@ -20,11 +37,11 @@
 {#if user_value && user_value.username}
 <nav id="logged_out_nav" class="navbar navbar-expand-lg navbar-{bgColour == 'secondary' ? 'light' : 'dark'} bg-{bgColour}">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#">{brand}</a>
+    <a class="navbar-brand" href="/">{user_value.Organization.organization_name ?user_value.Organization.organization_name : brand}</a>
 
     <div class="collapse navbar-collapse" id="navbarColor01">
       <ul class="navbar-nav me-auto">
-        {#each navLinks as nav}
+        {#each navLinks[user_value.user_level] as nav}
         <li class="nav-item">
           <a class="nav-link" href="{nav.link}">{nav.name}
           </a>
@@ -34,11 +51,7 @@
       <form class="d-flex">
         <ul class="navbar-nav me-auto">
           <li class="nav-item">
-            <a class="nav-link" href="#">{user_value.user_level}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" on:click="{logout}" href="#">Logout
+            <a class="nav-link" on:click="{logout}" href="/">Logout
             </a>
           </li>
         </ul>
@@ -49,7 +62,7 @@
 {:else}
 <nav id="logged_in_nav" class="navbar navbar-expand-lg navbar-{bgColour == 'secondary' ? 'light' : 'dark'} bg-{bgColour}">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">{brand}</a>
+      <a class="navbar-brand" href="/">{brand}</a>
   
       <div class="collapse navbar-collapse" id="navbarColor01">
         <ul class="navbar-nav me-auto">
@@ -57,7 +70,7 @@
         <form class="d-flex">
           <ul class="navbar-nav me-auto">
             <li class="nav-item">
-              <a class="nav-link" href="#">Login
+              <a class="nav-link" href="/">Login
               </a>
             </li>
           </ul>

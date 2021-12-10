@@ -1,10 +1,13 @@
 import axios from "axios"
+
 const baseURL = API_URL
 const APIService = {
-    get: function(route, params) {
+    get: async function(route, params) {
         let data = {}
-        axios.get(`${baseURL}${route}`, {
-            params: params
+        let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
+        await axios.get(`${baseURL}${route}`, {
+            params: params,
+            headers: headers
           })
           .then(function (response) {
             data = response.data
@@ -19,7 +22,7 @@ const APIService = {
     }, 
     post: async function(route, body) {
       let data = {}
-      let headers = {}
+      let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
       await axios.post(`${baseURL}${route}`, body, headers)
       .then(function (response) {
         data = response
@@ -29,10 +32,10 @@ const APIService = {
       });
       return data
     },
-    put: function(route, body) {
+    put: async function(route, body) {
       let data = {}
-      let headers = {}
-      axios.put(`${baseURL}${route}`, body, headers)
+      let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
+      await axios.put(`${baseURL}${route}`, body, {headers})
       .then(function (response) {
         data = response
       })
@@ -43,7 +46,7 @@ const APIService = {
     },
     delete: function(route, body) {
       let data = {}
-      let headers = {}
+      let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
       axios.delete(`${baseURL}${route}`, body, headers)
       .then(function (response) {
         data = response

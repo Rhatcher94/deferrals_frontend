@@ -29,6 +29,7 @@
                 if(loginSuccess){
                     user.update(user => user = data.data.user)
                     localStorage.setItem("app_user", JSON.stringify(user_value));
+                    localStorage.setItem("app_token", data.data.token);
                     router.redirect("/home")
                     
                 } else {
