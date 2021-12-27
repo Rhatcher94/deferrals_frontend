@@ -1,5 +1,6 @@
 <script>
 	import NavBar from "./components/NavBar.svelte"
+	import Alerts from "./components/partials/Alerts.svelte"
 	import { onMount } from 'svelte';
 	import router from "page"
 	import { user } from "./stores"
@@ -11,8 +12,18 @@
 	import NotFound from "./components/404.svelte"
 	import Login from "./components/Login.svelte"
 	import MyOrganization from "./components/MyOrganization.svelte"
+	import Invoices from "./components/Invoices.svelte"
+	import Invoice from "./components/Invoice.svelte"
+	import Organizations from "./components/Organizations.svelte"
+	import Organization from "./components/Organization.svelte"
 
-	let page 
+	let page
+	let params
+
+	router('/organization/:id', SetParams, CheckNoUser ,() => page = Organization)
+	router('/organizations', CheckNoUser ,() => page = Organizations)
+	router('/invoice', CheckNoUser ,() => page = Invoice)
+	router('/invoices', CheckNoUser ,() => page = Invoices)
 	router('/organization', CheckNoUser ,() => page = MyOrganization)
 	router('/about', CheckNoUser ,() => page = About)
 	router('/home', CheckNoUser ,() => page = Home)
@@ -25,11 +36,17 @@
 		router.start()
 	});
 
+	function SetParams(ctx, next) {
+    	params = ctx.params
+    	next()
+	}
+
 </script>
 
 <main>
 	<NavBar bgColour="dark" brand="ZD"/>
-	<svelte:component this={page} />
+	<Alerts />
+	<svelte:component this={page} params="{params}" />
 </main>
 
 <style>

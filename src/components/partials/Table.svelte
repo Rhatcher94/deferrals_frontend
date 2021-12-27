@@ -2,7 +2,6 @@
     export let rowColour = 'primary';
     export let headings = ['heading1', 'heading2', 'heading3']
     export let rows = [["col1", "col2", "col3"], ["col1", "col2", "col3"], ["col1", "col2", "col3"], ["col1", "col2", "col3"], ["col1", "col2", "col3"]]
-
 </script>
 
 <table class="table table-hover">

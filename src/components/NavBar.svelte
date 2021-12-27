@@ -7,7 +7,6 @@
     let navLinks = {
       1:[
         {name: 'Organizations', link: '/organizations'}, 
-        {name: 'Users', link: '/users'},
         {name: 'Invoices', link: '/invoices'},
         {name: 'My Organization', link: '/organization'}, 
         {name: 'Organization Users', link: '/organization-users'}

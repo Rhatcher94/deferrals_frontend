@@ -23,7 +23,7 @@ const APIService = {
     post: async function(route, body) {
       let data = {}
       let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
-      await axios.post(`${baseURL}${route}`, body, headers)
+      await axios.post(`${baseURL}${route}`, body, {headers})
       .then(function (response) {
         data = response
       })
@@ -44,10 +44,14 @@ const APIService = {
       });
       return data
     },
-    delete: function(route, body) {
+    delete: async function(route, params) {
       let data = {}
       let headers = {"Authorization": "Bearer " + localStorage.getItem("app_token")}
-      axios.delete(`${baseURL}${route}`, body, headers)
+      await axios.delete(`${baseURL}${route}`, 
+      {
+        headers: headers,
+        params: params
+      })
       .then(function (response) {
         data = response
       })

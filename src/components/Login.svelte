@@ -20,7 +20,8 @@
             let response = await APIService.post("/api/user/login", {username: username, password: password, type: "creds"})
             if(response.status && response.status === 200) {
                 let data = response.data
-                if(data.status === "Success") {
+                console.log(response.data)
+                if(data.status === "success") {
                     loginSuccess = true
                 } else {
                     loginSuccess = false
