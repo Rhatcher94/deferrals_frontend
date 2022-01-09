@@ -4,6 +4,9 @@ var app = (function () {
     'use strict';
 
     function noop() { }
+    function is_promise(value) {
+        return value && typeof value === 'object' && typeof value.then === 'function';
+    }
     function add_location(element, file, line, column, char) {
         element.__svelte_meta = {
             loc: { file, line, column, char }
@@ -79,6 +82,20 @@ var app = (function () {
     }
     function set_style(node, key, value, important) {
         node.style.setProperty(key, value, important ? 'important' : '');
+    }
+    function select_option(select, value) {
+        for (let i = 0; i < select.options.length; i += 1) {
+            const option = select.options[i];
+            if (option.__value === value) {
+                option.selected = true;
+                return;
+            }
+        }
+        select.selectedIndex = -1; // no option should be selected
+    }
+    function select_value(select) {
+        const selected_option = select.querySelector(':checked') || select.options[0];
+        return selected_option && selected_option.__value;
     }
     function custom_event(type, detail, bubbles = false) {
         const e = document.createEvent('CustomEvent');
@@ -198,6 +215,88 @@ var app = (function () {
             });
             block.o(local);
         }
+    }
+
+    function handle_promise(promise, info) {
+        const token = info.token = {};
+        function update(type, index, key, value) {
+            if (info.token !== token)
+                return;
+            info.resolved = value;
+            let child_ctx = info.ctx;
+            if (key !== undefined) {
+                child_ctx = child_ctx.slice();
+                child_ctx[key] = value;
+            }
+            const block = type && (info.current = type)(child_ctx);
+            let needs_flush = false;
+            if (info.block) {
+                if (info.blocks) {
+                    info.blocks.forEach((block, i) => {
+                        if (i !== index && block) {
+                            group_outros();
+                            transition_out(block, 1, 1, () => {
+                                if (info.blocks[i] === block) {
+                                    info.blocks[i] = null;
+                                }
+                            });
+                            check_outros();
+                        }
+                    });
+                }
+                else {
+                    info.block.d(1);
+                }
+                block.c();
+                transition_in(block, 1);
+                block.m(info.mount(), info.anchor);
+                needs_flush = true;
+            }
+            info.block = block;
+            if (info.blocks)
+                info.blocks[index] = block;
+            if (needs_flush) {
+                flush();
+            }
+        }
+        if (is_promise(promise)) {
+            const current_component = get_current_component();
+            promise.then(value => {
+                set_current_component(current_component);
+                update(info.then, 1, info.value, value);
+                set_current_component(null);
+            }, error => {
+                set_current_component(current_component);
+                update(info.catch, 2, info.error, error);
+                set_current_component(null);
+                if (!info.hasCatch) {
+                    throw error;
+                }
+            });
+            // if we previously had a then/catch block, destroy it
+            if (info.current !== info.pending) {
+                update(info.pending, 0);
+                return true;
+            }
+        }
+        else {
+            if (info.current !== info.then) {
+                update(info.then, 1, info.value, promise);
+                return true;
+            }
+            info.resolved = promise;
+        }
+    }
+    function update_await_block_branch(info, ctx, dirty) {
+        const child_ctx = ctx.slice();
+        const { resolved } = info;
+        if (info.current === info.then) {
+            child_ctx[info.value] = resolved;
+        }
+        if (info.current === info.catch) {
+            child_ctx[info.error] = resolved;
+        }
+        info.block.p(child_ctx, dirty);
     }
 
     const globals = (typeof window !== 'undefined'
@@ -466,7 +565,6 @@ var app = (function () {
 
     const showMessage = writable({show: false, message: "", type: ""});
     const invoices = writable([]);
-    const selectedInvoice = writable([]);
     const user = writable({});
     const myOrganization = writable({});
 
@@ -1711,7 +1809,7 @@ var app = (function () {
     }
 
     // (61:0) {:else}
-    function create_else_block$1(ctx) {
+    function create_else_block$2(ctx) {
     	let nav;
     	let div1;
     	let a0;
@@ -1792,7 +1890,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_else_block$1.name,
+    		id: create_else_block$2.name,
     		type: "else",
     		source: "(61:0) {:else}",
     		ctx
@@ -2005,7 +2103,7 @@ var app = (function () {
 
     	function select_block_type(ctx, dirty) {
     		if (/*user_value*/ ctx[2] && /*user_value*/ ctx[2].username) return create_if_block$3;
-    		return create_else_block$1;
+    		return create_else_block$2;
     	}
 
     	let current_block_type = select_block_type(ctx);
@@ -4421,8 +4519,8 @@ var app = (function () {
             let response = await APIService.get("/api/organization/books/account", {"org_id": org_id, type: "many"});
             return response.data
         },
-        addBooksAccount: async function (books_account_code, org_id) {
-            let response = await APIService.post("/api/organization/books/account", {data: {books_account_code: books_account_code, org_id: org_id}});
+        addBooksAccount: async function (books_account_code, books_account_type, org_id) {
+            let response = await APIService.post("/api/organization/books/account", {data: {books_account_type: books_account_type, books_account_code: books_account_code, org_id: org_id}});
             ShowMessage(response, "Your Books Account has been added");
             return response.data
         },
@@ -4446,19 +4544,19 @@ var app = (function () {
 
     function get_each_context$4(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[15] = list[i];
+    	child_ctx[18] = list[i];
     	return child_ctx;
     }
 
-    // (141:10) {:else}
-    function create_else_block(ctx) {
+    // (160:8) {:else}
+    function create_else_block$1(ctx) {
     	let h5;
 
     	const block = {
     		c: function create() {
     			h5 = element("h5");
     			h5.textContent = "No books accounts added";
-    			add_location(h5, file$5, 141, 10, 6263);
+    			add_location(h5, file$5, 160, 8, 6841);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h5, anchor);
@@ -4471,19 +4569,26 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_else_block.name,
+    		id: create_else_block$1.name,
     		type: "else",
-    		source: "(141:10) {:else}",
+    		source: "(160:8) {:else}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (129:8) {#if booksAccounts.length > 0}
+    // (136:6) {#if booksAccounts.length > 0}
     function create_if_block$1(ctx) {
-    	let h5;
+    	let div3;
+    	let div0;
+    	let h50;
     	let t1;
+    	let div1;
+    	let h51;
+    	let t3;
+    	let div2;
+    	let t4;
     	let each_1_anchor;
     	let each_value = /*booksAccounts*/ ctx[2];
     	validate_each_argument(each_value);
@@ -4495,20 +4600,44 @@ var app = (function () {
 
     	const block = {
     		c: function create() {
-    			h5 = element("h5");
-    			h5.textContent = "Account Code";
+    			div3 = element("div");
+    			div0 = element("div");
+    			h50 = element("h5");
+    			h50.textContent = "Account Code";
     			t1 = space();
+    			div1 = element("div");
+    			h51 = element("h5");
+    			h51.textContent = "Account Type";
+    			t3 = space();
+    			div2 = element("div");
+    			t4 = space();
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
     			each_1_anchor = empty();
-    			add_location(h5, file$5, 129, 10, 5803);
+    			add_location(h50, file$5, 138, 12, 6119);
+    			attr_dev(div0, "class", "col-sm");
+    			add_location(div0, file$5, 137, 10, 6086);
+    			add_location(h51, file$5, 141, 12, 6201);
+    			attr_dev(div1, "class", "col-sm");
+    			add_location(div1, file$5, 140, 10, 6168);
+    			attr_dev(div2, "class", "col-sm");
+    			add_location(div2, file$5, 143, 10, 6250);
+    			attr_dev(div3, "class", "row");
+    			add_location(div3, file$5, 136, 8, 6058);
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, h5, anchor);
-    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div0);
+    			append_dev(div0, h50);
+    			append_dev(div3, t1);
+    			append_dev(div3, div1);
+    			append_dev(div1, h51);
+    			append_dev(div3, t3);
+    			append_dev(div3, div2);
+    			insert_dev(target, t4, anchor);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(target, anchor);
@@ -4517,7 +4646,7 @@ var app = (function () {
     			insert_dev(target, each_1_anchor, anchor);
     		},
     		p: function update(ctx, dirty) {
-    			if (dirty & /*clickDeleteBooksAccount, booksAccounts*/ 132) {
+    			if (dirty & /*clickDeleteBooksAccount, booksAccounts*/ 260) {
     				each_value = /*booksAccounts*/ ctx[2];
     				validate_each_argument(each_value);
     				let i;
@@ -4542,8 +4671,8 @@ var app = (function () {
     			}
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(h5);
-    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div3);
+    			if (detaching) detach_dev(t4);
     			destroy_each(each_blocks, detaching);
     			if (detaching) detach_dev(each_1_anchor);
     		}
@@ -4553,65 +4682,82 @@ var app = (function () {
     		block,
     		id: create_if_block$1.name,
     		type: "if",
-    		source: "(129:8) {#if booksAccounts.length > 0}",
+    		source: "(136:6) {#if booksAccounts.length > 0}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (131:10) {#each booksAccounts as account}
+    // (147:8) {#each booksAccounts as account}
     function create_each_block$4(ctx) {
-    	let div2;
+    	let div3;
     	let div0;
-    	let p;
-    	let t0_value = /*account*/ ctx[15].books_account_code + "";
+    	let p0;
+    	let t0_value = /*account*/ ctx[18].books_account_code + "";
     	let t0;
     	let t1;
     	let div1;
-    	let a;
+    	let p1;
+    	let t2_value = /*account*/ ctx[18].books_account_type + "";
+    	let t2;
     	let t3;
+    	let div2;
+    	let a;
+    	let t5;
     	let mounted;
     	let dispose;
 
     	const block = {
     		c: function create() {
-    			div2 = element("div");
+    			div3 = element("div");
     			div0 = element("div");
-    			p = element("p");
+    			p0 = element("p");
     			t0 = text(t0_value);
     			t1 = space();
     			div1 = element("div");
+    			p1 = element("p");
+    			t2 = text(t2_value);
+    			t3 = space();
+    			div2 = element("div");
     			a = element("a");
     			a.textContent = "X";
-    			t3 = space();
-    			attr_dev(p, "class", "text-success");
-    			add_location(p, file$5, 133, 16, 5949);
+    			t5 = space();
+    			attr_dev(p0, "class", "text-success");
+    			add_location(p0, file$5, 149, 14, 6419);
     			attr_dev(div0, "class", "col-sm");
-    			add_location(div0, file$5, 132, 14, 5912);
-    			attr_dev(a, "href", "/");
-    			add_location(a, file$5, 136, 16, 6079);
+    			add_location(div0, file$5, 148, 12, 6384);
+    			attr_dev(p1, "class", "text-success");
+    			add_location(p1, file$5, 152, 14, 6543);
     			attr_dev(div1, "class", "col-sm");
-    			add_location(div1, file$5, 135, 14, 6042);
-    			attr_dev(div2, "class", "row");
-    			add_location(div2, file$5, 131, 12, 5880);
+    			add_location(div1, file$5, 151, 12, 6508);
+    			attr_dev(a, "href", "/");
+    			add_location(a, file$5, 155, 14, 6667);
+    			attr_dev(div2, "class", "col-sm");
+    			add_location(div2, file$5, 154, 12, 6632);
+    			attr_dev(div3, "class", "row");
+    			add_location(div3, file$5, 147, 10, 6354);
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div2, anchor);
-    			append_dev(div2, div0);
-    			append_dev(div0, p);
-    			append_dev(p, t0);
-    			append_dev(div2, t1);
-    			append_dev(div2, div1);
-    			append_dev(div1, a);
-    			append_dev(div2, t3);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div0);
+    			append_dev(div0, p0);
+    			append_dev(p0, t0);
+    			append_dev(div3, t1);
+    			append_dev(div3, div1);
+    			append_dev(div1, p1);
+    			append_dev(p1, t2);
+    			append_dev(div3, t3);
+    			append_dev(div3, div2);
+    			append_dev(div2, a);
+    			append_dev(div3, t5);
 
     			if (!mounted) {
     				dispose = listen_dev(
     					a,
     					"click",
     					prevent_default(function () {
-    						if (is_function(/*clickDeleteBooksAccount*/ ctx[7](/*account*/ ctx[15].books_account_code))) /*clickDeleteBooksAccount*/ ctx[7](/*account*/ ctx[15].books_account_code).apply(this, arguments);
+    						if (is_function(/*clickDeleteBooksAccount*/ ctx[8](/*account*/ ctx[18].books_account_code))) /*clickDeleteBooksAccount*/ ctx[8](/*account*/ ctx[18].books_account_code).apply(this, arguments);
     					}),
     					false,
     					true,
@@ -4623,10 +4769,11 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if (dirty & /*booksAccounts*/ 4 && t0_value !== (t0_value = /*account*/ ctx[15].books_account_code + "")) set_data_dev(t0, t0_value);
+    			if (dirty & /*booksAccounts*/ 4 && t0_value !== (t0_value = /*account*/ ctx[18].books_account_code + "")) set_data_dev(t0, t0_value);
+    			if (dirty & /*booksAccounts*/ 4 && t2_value !== (t2_value = /*account*/ ctx[18].books_account_type + "")) set_data_dev(t2, t2_value);
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div2);
+    			if (detaching) detach_dev(div3);
     			mounted = false;
     			dispose();
     		}
@@ -4636,7 +4783,7 @@ var app = (function () {
     		block,
     		id: create_each_block$4.name,
     		type: "each",
-    		source: "(131:10) {#each booksAccounts as account}",
+    		source: "(147:8) {#each booksAccounts as account}",
     		ctx
     	});
 
@@ -4698,45 +4845,47 @@ var app = (function () {
     	let t23;
     	let button3_disabled_value;
     	let t24;
-    	let div19;
+    	let div18;
     	let div14;
     	let h41;
     	let t26;
-    	let div18;
     	let div17;
+    	let div16;
     	let div15;
     	let label4;
     	let t28;
     	let input4;
     	let t29;
-    	let div16;
-    	let label5;
-    	let t31;
-    	let input5;
-    	let t32;
     	let button4;
-    	let t34;
-    	let div24;
-    	let div20;
-    	let h42;
-    	let t36;
+    	let t31;
     	let div23;
+    	let div19;
+    	let h42;
+    	let t33;
     	let div22;
     	let div21;
+    	let div20;
+    	let label5;
+    	let t35;
+    	let input5;
+    	let t36;
     	let label6;
     	let t38;
-    	let input6;
-    	let t39;
-    	let button5;
-    	let t41;
-    	let br;
+    	let select;
+    	let option0;
+    	let option1;
+    	let option2;
     	let t42;
+    	let button5;
+    	let t44;
+    	let br;
+    	let t45;
     	let mounted;
     	let dispose;
 
     	function select_block_type(ctx, dirty) {
     		if (/*booksAccounts*/ ctx[2].length > 0) return create_if_block$1;
-    		return create_else_block;
+    		return create_else_block$1;
     	}
 
     	let current_block_type = select_block_type(ctx);
@@ -4799,190 +4948,207 @@ var app = (function () {
     			button3 = element("button");
     			t23 = text("Generate");
     			t24 = space();
-    			div19 = element("div");
+    			div18 = element("div");
     			div14 = element("div");
     			h41 = element("h4");
     			h41.textContent = "Zoho Details";
     			t26 = space();
-    			div18 = element("div");
     			div17 = element("div");
+    			div16 = element("div");
     			div15 = element("div");
     			label4 = element("label");
     			label4.textContent = "Invoice Custom Field";
     			t28 = space();
     			input4 = element("input");
     			t29 = space();
-    			div16 = element("div");
-    			label5 = element("label");
-    			label5.textContent = "Deferral Accounts";
-    			t31 = space();
-    			input5 = element("input");
-    			t32 = space();
     			button4 = element("button");
     			button4.textContent = "Update";
-    			t34 = space();
-    			div24 = element("div");
-    			div20 = element("div");
+    			t31 = space();
+    			div23 = element("div");
+    			div19 = element("div");
     			h42 = element("h4");
     			h42.textContent = "Bank Accounts";
-    			t36 = space();
-    			div23 = element("div");
+    			t33 = space();
     			div22 = element("div");
     			div21 = element("div");
+    			div20 = element("div");
+    			label5 = element("label");
+    			label5.textContent = "Account Code";
+    			t35 = space();
+    			input5 = element("input");
+    			t36 = space();
     			label6 = element("label");
-    			label6.textContent = "New Bank Account";
+    			label6.textContent = "Account Type";
     			t38 = space();
-    			input6 = element("input");
-    			t39 = space();
+    			select = element("select");
+    			option0 = element("option");
+    			option0.textContent = "Choose here";
+    			option1 = element("option");
+    			option1.textContent = "Deferred";
+    			option2 = element("option");
+    			option2.textContent = "Realized";
+    			t42 = space();
     			button5 = element("button");
     			button5.textContent = "Add";
-    			t41 = space();
+    			t44 = space();
     			br = element("br");
-    			t42 = space();
+    			t45 = space();
     			if_block.c();
-    			add_location(h40, file$5, 57, 29, 1878);
+    			add_location(h40, file$5, 62, 27, 1994);
     			attr_dev(div0, "class", "card-header");
-    			add_location(div0, file$5, 57, 4, 1853);
+    			add_location(div0, file$5, 62, 2, 1969);
     			attr_dev(label0, "for", "exampleInputPassword1");
     			attr_dev(label0, "class", "form-label mt-4");
-    			add_location(label0, file$5, 61, 12, 2037);
+    			add_location(label0, file$5, 66, 10, 2145);
     			attr_dev(input0, "type", "text");
     			attr_dev(input0, "class", "form-control");
     			attr_dev(input0, "id", "exampleInputPassword1");
     			attr_dev(input0, "placeholder", input0_placeholder_value = /*myOrganization_value*/ ctx[0].organization_zoho_id);
-    			add_location(input0, file$5, 62, 12, 2124);
+    			add_location(input0, file$5, 67, 10, 2230);
     			attr_dev(div1, "class", "form-group");
-    			add_location(div1, file$5, 60, 8, 2000);
+    			add_location(div1, file$5, 65, 6, 2110);
     			attr_dev(label1, "for", "exampleInputPassword1");
     			attr_dev(label1, "class", "form-label mt-4");
-    			add_location(label1, file$5, 65, 12, 2365);
+    			add_location(label1, file$5, 70, 10, 2465);
     			attr_dev(input1, "type", "text");
     			attr_dev(input1, "class", "form-control");
     			attr_dev(input1, "id", "exampleInputPassword1");
     			attr_dev(input1, "placeholder", input1_placeholder_value = /*myOrganization_value*/ ctx[0].organization_client_id);
-    			add_location(input1, file$5, 66, 12, 2454);
+    			add_location(input1, file$5, 71, 10, 2552);
     			attr_dev(div2, "class", "form-group");
-    			add_location(div2, file$5, 64, 8, 2328);
+    			add_location(div2, file$5, 69, 6, 2430);
     			attr_dev(label2, "for", "exampleInputPassword1");
     			attr_dev(label2, "class", "form-label mt-4");
-    			add_location(label2, file$5, 69, 12, 2699);
+    			add_location(label2, file$5, 74, 10, 2791);
     			attr_dev(input2, "type", "text");
     			attr_dev(input2, "class", "form-control");
     			attr_dev(input2, "id", "exampleInputPassword1");
     			attr_dev(input2, "placeholder", input2_placeholder_value = /*myOrganization_value*/ ctx[0].organization_client_secret);
-    			add_location(input2, file$5, 70, 12, 2792);
+    			add_location(input2, file$5, 75, 10, 2882);
     			attr_dev(div3, "class", "form-group");
-    			add_location(div3, file$5, 68, 8, 2662);
+    			add_location(div3, file$5, 73, 6, 2756);
     			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "btn btn-primary mt-3");
-    			add_location(button0, file$5, 72, 8, 3008);
+    			add_location(button0, file$5, 77, 6, 3094);
     			attr_dev(button1, "type", "button");
     			attr_dev(button1, "class", "btn btn-danger mt-3");
     			attr_dev(button1, "data-toggle", "modal");
     			attr_dev(button1, "data-target", "#OAUTHModal");
-    			add_location(button1, file$5, 73, 8, 3115);
+    			add_location(button1, file$5, 78, 6, 3199);
     			attr_dev(p, "class", "text-success mt-3");
     			p.hidden = p_hidden_value = !/*myOrganization_value*/ ctx[0].zoho_refresh_token;
-    			add_location(p, file$5, 74, 8, 3242);
+    			add_location(p, file$5, 79, 6, 3324);
     			attr_dev(div4, "class", "card-text");
-    			add_location(div4, file$5, 59, 6, 1968);
+    			add_location(div4, file$5, 64, 4, 2080);
     			attr_dev(div5, "class", "card-body");
-    			add_location(div5, file$5, 58, 4, 1938);
+    			add_location(div5, file$5, 63, 2, 2052);
     			attr_dev(div6, "class", "card border-secondary mb-3 m-auto mt-3");
     			set_style(div6, "max-width", "50vw");
-    			add_location(div6, file$5, 56, 0, 1771);
+    			add_location(div6, file$5, 61, 0, 1889);
     			attr_dev(h5, "class", "modal-title");
-    			add_location(h5, file$5, 83, 10, 3560);
+    			add_location(h5, file$5, 88, 8, 3626);
     			attr_dev(span, "aria-hidden", "true");
-    			add_location(span, file$5, 85, 12, 3711);
+    			add_location(span, file$5, 90, 10, 3773);
     			attr_dev(button2, "type", "button");
     			attr_dev(button2, "class", "btn-close");
     			attr_dev(button2, "data-dismiss", "modal");
     			attr_dev(button2, "aria-label", "Close");
-    			add_location(button2, file$5, 84, 10, 3618);
+    			add_location(button2, file$5, 89, 8, 3682);
     			attr_dev(div7, "class", "modal-header");
-    			add_location(div7, file$5, 82, 8, 3523);
+    			add_location(div7, file$5, 87, 6, 3591);
     			attr_dev(label3, "for", "exampleInputPassword1");
     			attr_dev(label3, "class", "form-label mt-4");
-    			add_location(label3, file$5, 90, 14, 3863);
+    			add_location(label3, file$5, 95, 12, 3915);
     			attr_dev(input3, "type", "text");
     			attr_dev(input3, "class", "form-control");
     			attr_dev(input3, "id", "zohoGeneratedCode");
-    			add_location(input3, file$5, 91, 14, 3959);
+    			add_location(input3, file$5, 96, 12, 4009);
     			attr_dev(div8, "class", "form-group");
-    			add_location(div8, file$5, 89, 12, 3824);
+    			add_location(div8, file$5, 94, 10, 3878);
     			attr_dev(div9, "class", "modal-body");
-    			add_location(div9, file$5, 88, 8, 3787);
+    			add_location(div9, file$5, 93, 6, 3843);
     			attr_dev(button3, "type", "button");
     			button3.disabled = button3_disabled_value = /*zoho_code*/ ctx[1].length < 10;
     			attr_dev(button3, "class", "btn btn-primary");
     			attr_dev(button3, "data-dismiss", "modal");
-    			add_location(button3, file$5, 95, 10, 4126);
+    			add_location(button3, file$5, 100, 8, 4168);
     			attr_dev(div10, "class", "modal-footer");
-    			add_location(div10, file$5, 94, 8, 4089);
+    			add_location(div10, file$5, 99, 6, 4133);
     			attr_dev(div11, "class", "modal-content");
-    			add_location(div11, file$5, 81, 6, 3487);
+    			add_location(div11, file$5, 86, 4, 3557);
     			attr_dev(div12, "class", "modal-dialog");
     			attr_dev(div12, "role", "document");
-    			add_location(div12, file$5, 80, 4, 3438);
+    			add_location(div12, file$5, 85, 2, 3510);
     			attr_dev(div13, "class", "modal fade hidden");
     			attr_dev(div13, "id", "OAUTHModal");
-    			add_location(div13, file$5, 79, 2, 3386);
-    			add_location(h41, file$5, 102, 29, 4449);
+    			add_location(div13, file$5, 84, 0, 3460);
+    			add_location(h41, file$5, 107, 27, 4479);
     			attr_dev(div14, "class", "card-header");
-    			add_location(div14, file$5, 102, 4, 4424);
+    			add_location(div14, file$5, 107, 2, 4454);
     			attr_dev(label4, "for", "exampleInputPassword1");
     			attr_dev(label4, "class", "form-label mt-4");
-    			add_location(label4, file$5, 106, 10, 4578);
+    			add_location(label4, file$5, 111, 8, 4600);
     			attr_dev(input4, "type", "text");
     			attr_dev(input4, "class", "form-control");
     			attr_dev(input4, "id", "exampleInputPassword1");
-    			add_location(input4, file$5, 107, 10, 4676);
+    			add_location(input4, file$5, 112, 8, 4696);
     			attr_dev(div15, "class", "form-group");
-    			add_location(div15, file$5, 105, 8, 4543);
+    			add_location(div15, file$5, 110, 6, 4567);
+    			attr_dev(button4, "type", "button");
+    			attr_dev(button4, "class", "btn btn-primary mt-3");
+    			add_location(button4, file$5, 114, 6, 4845);
+    			attr_dev(div16, "class", "card-text");
+    			add_location(div16, file$5, 109, 4, 4537);
+    			attr_dev(div17, "class", "card-body");
+    			add_location(div17, file$5, 108, 2, 4509);
+    			attr_dev(div18, "class", "card border-secondary mb-3 m-auto mt-3");
+    			set_style(div18, "max-width", "50vw");
+    			add_location(div18, file$5, 106, 0, 4374);
+    			add_location(h42, file$5, 120, 27, 5089);
+    			attr_dev(div19, "class", "card-header");
+    			add_location(div19, file$5, 120, 2, 5064);
     			attr_dev(label5, "for", "exampleInputPassword1");
     			attr_dev(label5, "class", "form-label mt-4");
-    			add_location(label5, file$5, 110, 10, 4802);
+    			add_location(label5, file$5, 124, 10, 5213);
     			attr_dev(input5, "type", "text");
     			attr_dev(input5, "class", "form-control");
     			attr_dev(input5, "id", "exampleInputPassword1");
-    			add_location(input5, file$5, 111, 10, 4897);
-    			attr_dev(div16, "class", "form-group");
-    			add_location(div16, file$5, 109, 8, 4767);
-    			attr_dev(button4, "type", "button");
-    			attr_dev(button4, "class", "btn btn-primary mt-3");
-    			add_location(button4, file$5, 113, 8, 4990);
-    			attr_dev(div17, "class", "card-text");
-    			add_location(div17, file$5, 104, 6, 4511);
-    			attr_dev(div18, "class", "card-body");
-    			add_location(div18, file$5, 103, 4, 4481);
-    			attr_dev(div19, "class", "card border-secondary mb-3 m-auto mt-3");
-    			set_style(div19, "max-width", "50vw");
-    			add_location(div19, file$5, 101, 2, 4342);
-    			add_location(h42, file$5, 119, 29, 5244);
-    			attr_dev(div20, "class", "card-header");
-    			add_location(div20, file$5, 119, 4, 5219);
-    			attr_dev(label6, "for", "exampleInputPassword1");
+    			attr_dev(input5, "placeholder", "Account Code");
+    			add_location(input5, file$5, 125, 10, 5303);
+    			attr_dev(label6, "for", "accountTypeInput");
     			attr_dev(label6, "class", "form-label mt-4");
-    			add_location(label6, file$5, 123, 12, 5376);
-    			attr_dev(input6, "type", "text");
-    			attr_dev(input6, "class", "form-control");
-    			attr_dev(input6, "id", "exampleInputPassword1");
-    			attr_dev(input6, "placeholder", "Account Code");
-    			add_location(input6, file$5, 124, 12, 5472);
+    			add_location(label6, file$5, 126, 10, 5440);
+    			option0.__value = "";
+    			option0.value = option0.__value;
+    			option0.selected = true;
+    			option0.disabled = true;
+    			option0.hidden = true;
+    			add_location(option0, file$5, 128, 12, 5671);
+    			option1.__value = "DEFERRED";
+    			option1.value = option1.__value;
+    			add_location(option1, file$5, 129, 12, 5746);
+    			option2.__value = "REALIZED";
+    			option2.value = option2.__value;
+    			add_location(option2, file$5, 130, 12, 5801);
+    			attr_dev(select, "class", "form-select");
+    			attr_dev(select, "placeholder", "Account Type");
+    			attr_dev(select, "name", "accountTypeInput");
+    			attr_dev(select, "id", "accountTypeInput");
+    			if (/*booksAccountType*/ ctx[4] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[15].call(select));
+    			add_location(select, file$5, 127, 10, 5525);
     			attr_dev(button5, "type", "button");
     			attr_dev(button5, "class", "btn btn-primary mt-3");
-    			add_location(button5, file$5, 125, 12, 5611);
-    			attr_dev(div21, "class", "form-group");
-    			add_location(div21, file$5, 122, 8, 5339);
-    			add_location(br, file$5, 127, 8, 5747);
-    			attr_dev(div22, "class", "card-text");
-    			add_location(div22, file$5, 121, 6, 5307);
-    			attr_dev(div23, "class", "card-body");
-    			add_location(div23, file$5, 120, 4, 5277);
-    			attr_dev(div24, "class", "card border-secondary mb-3 m-auto mt-3");
-    			set_style(div24, "max-width", "50vw");
-    			add_location(div24, file$5, 118, 2, 5137);
+    			add_location(button5, file$5, 132, 10, 5874);
+    			attr_dev(div20, "class", "form-group");
+    			add_location(div20, file$5, 123, 6, 5178);
+    			add_location(br, file$5, 134, 6, 6006);
+    			attr_dev(div21, "class", "card-text");
+    			add_location(div21, file$5, 122, 4, 5148);
+    			attr_dev(div22, "class", "card-body");
+    			add_location(div22, file$5, 121, 2, 5120);
+    			attr_dev(div23, "class", "card border-secondary mb-3 m-auto mt-3");
+    			set_style(div23, "max-width", "50vw");
+    			add_location(div23, file$5, 119, 0, 4984);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -5040,53 +5206,59 @@ var app = (function () {
     			append_dev(div10, button3);
     			append_dev(button3, t23);
     			insert_dev(target, t24, anchor);
-    			insert_dev(target, div19, anchor);
-    			append_dev(div19, div14);
+    			insert_dev(target, div18, anchor);
+    			append_dev(div18, div14);
     			append_dev(div14, h41);
-    			append_dev(div19, t26);
-    			append_dev(div19, div18);
+    			append_dev(div18, t26);
     			append_dev(div18, div17);
-    			append_dev(div17, div15);
+    			append_dev(div17, div16);
+    			append_dev(div16, div15);
     			append_dev(div15, label4);
     			append_dev(div15, t28);
     			append_dev(div15, input4);
-    			append_dev(div17, t29);
-    			append_dev(div17, div16);
-    			append_dev(div16, label5);
-    			append_dev(div16, t31);
-    			append_dev(div16, input5);
-    			append_dev(div17, t32);
-    			append_dev(div17, button4);
-    			insert_dev(target, t34, anchor);
-    			insert_dev(target, div24, anchor);
-    			append_dev(div24, div20);
-    			append_dev(div20, h42);
-    			append_dev(div24, t36);
-    			append_dev(div24, div23);
+    			set_input_value(input4, /*myOrganization_value*/ ctx[0].organization_custom_field);
+    			append_dev(div16, t29);
+    			append_dev(div16, button4);
+    			insert_dev(target, t31, anchor);
+    			insert_dev(target, div23, anchor);
+    			append_dev(div23, div19);
+    			append_dev(div19, h42);
+    			append_dev(div23, t33);
     			append_dev(div23, div22);
     			append_dev(div22, div21);
-    			append_dev(div21, label6);
-    			append_dev(div21, t38);
-    			append_dev(div21, input6);
-    			set_input_value(input6, /*booksAccountCode*/ ctx[3]);
-    			append_dev(div21, t39);
-    			append_dev(div21, button5);
-    			append_dev(div22, t41);
-    			append_dev(div22, br);
-    			append_dev(div22, t42);
-    			if_block.m(div22, null);
+    			append_dev(div21, div20);
+    			append_dev(div20, label5);
+    			append_dev(div20, t35);
+    			append_dev(div20, input5);
+    			set_input_value(input5, /*booksAccountCode*/ ctx[3]);
+    			append_dev(div20, t36);
+    			append_dev(div20, label6);
+    			append_dev(div20, t38);
+    			append_dev(div20, select);
+    			append_dev(select, option0);
+    			append_dev(select, option1);
+    			append_dev(select, option2);
+    			select_option(select, /*booksAccountType*/ ctx[4]);
+    			append_dev(div20, t42);
+    			append_dev(div20, button5);
+    			append_dev(div21, t44);
+    			append_dev(div21, br);
+    			append_dev(div21, t45);
+    			if_block.m(div21, null);
 
     			if (!mounted) {
     				dispose = [
-    					listen_dev(input0, "input", /*input0_input_handler*/ ctx[8]),
-    					listen_dev(input1, "input", /*input1_input_handler*/ ctx[9]),
-    					listen_dev(input2, "input", /*input2_input_handler*/ ctx[10]),
-    					listen_dev(button0, "click", /*updateOrganization*/ ctx[4], false, false, false),
-    					listen_dev(input3, "input", /*input3_input_handler*/ ctx[11]),
-    					listen_dev(button3, "click", prevent_default(/*generateZohoAUTH*/ ctx[5]), false, true, false),
-    					listen_dev(button4, "click", /*updateOrganization*/ ctx[4], false, false, false),
-    					listen_dev(input6, "input", /*input6_input_handler*/ ctx[12]),
-    					listen_dev(button5, "click", prevent_default(/*clickAddBooksAccount*/ ctx[6]), false, true, false)
+    					listen_dev(input0, "input", /*input0_input_handler*/ ctx[9]),
+    					listen_dev(input1, "input", /*input1_input_handler*/ ctx[10]),
+    					listen_dev(input2, "input", /*input2_input_handler*/ ctx[11]),
+    					listen_dev(button0, "click", /*updateOrganization*/ ctx[5], false, false, false),
+    					listen_dev(input3, "input", /*input3_input_handler*/ ctx[12]),
+    					listen_dev(button3, "click", prevent_default(/*generateZohoAUTH*/ ctx[6]), false, true, false),
+    					listen_dev(input4, "input", /*input4_input_handler*/ ctx[13]),
+    					listen_dev(button4, "click", /*updateOrganization*/ ctx[5], false, false, false),
+    					listen_dev(input5, "input", /*input5_input_handler*/ ctx[14]),
+    					listen_dev(select, "change", /*select_change_handler*/ ctx[15]),
+    					listen_dev(button5, "click", prevent_default(/*clickAddBooksAccount*/ ctx[7]), false, true, false)
     				];
 
     				mounted = true;
@@ -5131,8 +5303,16 @@ var app = (function () {
     				prop_dev(button3, "disabled", button3_disabled_value);
     			}
 
-    			if (dirty & /*booksAccountCode*/ 8 && input6.value !== /*booksAccountCode*/ ctx[3]) {
-    				set_input_value(input6, /*booksAccountCode*/ ctx[3]);
+    			if (dirty & /*myOrganization_value*/ 1 && input4.value !== /*myOrganization_value*/ ctx[0].organization_custom_field) {
+    				set_input_value(input4, /*myOrganization_value*/ ctx[0].organization_custom_field);
+    			}
+
+    			if (dirty & /*booksAccountCode*/ 8 && input5.value !== /*booksAccountCode*/ ctx[3]) {
+    				set_input_value(input5, /*booksAccountCode*/ ctx[3]);
+    			}
+
+    			if (dirty & /*booksAccountType*/ 16) {
+    				select_option(select, /*booksAccountType*/ ctx[4]);
     			}
 
     			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
@@ -5143,7 +5323,7 @@ var app = (function () {
 
     				if (if_block) {
     					if_block.c();
-    					if_block.m(div22, null);
+    					if_block.m(div21, null);
     				}
     			}
     		},
@@ -5154,9 +5334,9 @@ var app = (function () {
     			if (detaching) detach_dev(t16);
     			if (detaching) detach_dev(div13);
     			if (detaching) detach_dev(t24);
-    			if (detaching) detach_dev(div19);
-    			if (detaching) detach_dev(t34);
-    			if (detaching) detach_dev(div24);
+    			if (detaching) detach_dev(div18);
+    			if (detaching) detach_dev(t31);
+    			if (detaching) detach_dev(div23);
     			if_block.d();
     			mounted = false;
     			run_all(dispose);
@@ -5211,25 +5391,29 @@ var app = (function () {
     	}
 
     	let booksAccountCode = "";
+    	let booksAccountType = "";
 
     	async function clickAddBooksAccount() {
-    		if (booksAccountCode.length > 1) {
-    			let newBooksAccount = await OrganizationService.addBooksAccount(booksAccountCode, user_value.OrganizationId);
+    		if (booksAccountType === "DEFERRED" || booksAccountType === "REALIZED") {
+    			if (booksAccountCode.length > 1) {
+    				let newBooksAccount = await OrganizationService.addBooksAccount(booksAccountCode, booksAccountType, user_value.OrganizationId);
 
-    			if (newBooksAccount.data.id) {
-    				await getBooksAccounts();
-    				console.log(newBooksAccount);
+    				if (newBooksAccount.data.id) {
+    					await getBooksAccounts();
+    					console.log(newBooksAccount);
+    				}
+    			} else {
+    				alert("Enter an account code");
     			}
+    		} else {
+    			alert("Select an account type");
     		}
     	}
 
     	async function clickDeleteBooksAccount(booksAccountId) {
     		let deleteBooksAccount = await OrganizationService.removeBooksAccount(booksAccountId, user_value.OrganizationId);
-
-    		if (deleteBooksAccount.data === 1) {
-    			await getBooksAccounts();
-    			console.log(deleteBooksAccount.data);
-    		}
+    		await getBooksAccounts();
+    		console.log(deleteBooksAccount.data);
     	}
 
     	onMount(async () => {
@@ -5264,9 +5448,19 @@ var app = (function () {
     		$$invalidate(1, zoho_code);
     	}
 
-    	function input6_input_handler() {
+    	function input4_input_handler() {
+    		myOrganization_value.organization_custom_field = this.value;
+    		$$invalidate(0, myOrganization_value);
+    	}
+
+    	function input5_input_handler() {
     		booksAccountCode = this.value;
     		$$invalidate(3, booksAccountCode);
+    	}
+
+    	function select_change_handler() {
+    		booksAccountType = select_value(this);
+    		$$invalidate(4, booksAccountType);
     	}
 
     	$$self.$capture_state = () => ({
@@ -5282,6 +5476,7 @@ var app = (function () {
     		booksAccounts,
     		getBooksAccounts,
     		booksAccountCode,
+    		booksAccountType,
     		clickAddBooksAccount,
     		clickDeleteBooksAccount
     	});
@@ -5292,6 +5487,7 @@ var app = (function () {
     		if ('zoho_code' in $$props) $$invalidate(1, zoho_code = $$props.zoho_code);
     		if ('booksAccounts' in $$props) $$invalidate(2, booksAccounts = $$props.booksAccounts);
     		if ('booksAccountCode' in $$props) $$invalidate(3, booksAccountCode = $$props.booksAccountCode);
+    		if ('booksAccountType' in $$props) $$invalidate(4, booksAccountType = $$props.booksAccountType);
     	};
 
     	if ($$props && "$$inject" in $$props) {
@@ -5303,6 +5499,7 @@ var app = (function () {
     		zoho_code,
     		booksAccounts,
     		booksAccountCode,
+    		booksAccountType,
     		updateOrganization,
     		generateZohoAUTH,
     		clickAddBooksAccount,
@@ -5311,7 +5508,9 @@ var app = (function () {
     		input1_input_handler,
     		input2_input_handler,
     		input3_input_handler,
-    		input6_input_handler
+    		input4_input_handler,
+    		input5_input_handler,
+    		select_change_handler
     	];
     }
 
@@ -5346,7 +5545,7 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (42:6) {#each headings as heading}
+    // (41:4) {#each headings as heading}
     function create_each_block_1$1(ctx) {
     	let th;
     	let t_value = /*heading*/ ctx[9] + "";
@@ -5357,7 +5556,7 @@ var app = (function () {
     			th = element("th");
     			t = text(t_value);
     			attr_dev(th, "scope", "col");
-    			add_location(th, file$4, 42, 8, 1164);
+    			add_location(th, file$4, 41, 6, 1051);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, th, anchor);
@@ -5373,14 +5572,14 @@ var app = (function () {
     		block,
     		id: create_each_block_1$1.name,
     		type: "each",
-    		source: "(42:6) {#each headings as heading}",
+    		source: "(41:4) {#each headings as heading}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (48:6) {#each invoices_value as invoice}
+    // (47:4) {#each invoices_value as invoice}
     function create_each_block$3(ctx) {
     	let tr;
     	let td0;
@@ -5416,13 +5615,13 @@ var app = (function () {
     			td3 = element("td");
     			button = element("button");
     			t6 = space();
-    			add_location(td0, file$4, 49, 8, 1327);
-    			add_location(td1, file$4, 50, 8, 1369);
-    			add_location(td2, file$4, 51, 8, 1401);
-    			add_location(button, file$4, 52, 12, 1446);
-    			add_location(td3, file$4, 52, 8, 1442);
+    			add_location(td0, file$4, 48, 6, 1200);
+    			add_location(td1, file$4, 49, 6, 1240);
+    			add_location(td2, file$4, 50, 6, 1270);
+    			add_location(button, file$4, 51, 10, 1313);
+    			add_location(td3, file$4, 51, 6, 1309);
     			attr_dev(tr, "class", "table-primary");
-    			add_location(tr, file$4, 48, 6, 1292);
+    			add_location(tr, file$4, 47, 4, 1167);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, tr, anchor);
@@ -5471,7 +5670,7 @@ var app = (function () {
     		block,
     		id: create_each_block$3.name,
     		type: "each",
-    		source: "(48:6) {#each invoices_value as invoice}",
+    		source: "(47:4) {#each invoices_value as invoice}",
     		ctx
     	});
 
@@ -5517,11 +5716,11 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			add_location(tr, file$4, 40, 6, 1117);
-    			add_location(thead, file$4, 39, 4, 1103);
-    			add_location(tbody, file$4, 46, 4, 1238);
+    			add_location(tr, file$4, 39, 4, 1008);
+    			add_location(thead, file$4, 38, 2, 996);
+    			add_location(tbody, file$4, 45, 2, 1117);
     			attr_dev(table, "class", "table table-hover");
-    			add_location(table, file$4, 38, 0, 1065);
+    			add_location(table, file$4, 37, 0, 960);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -5639,8 +5838,7 @@ var app = (function () {
     	}
 
     	function selectInvoice(invoice) {
-    		selectedInvoice.update(value => invoice);
-    		page.redirect("/invoice");
+    		page.redirect(`/invoice/${invoice.invoice_id}`);
     	}
 
     	onMount(async () => {
@@ -5658,7 +5856,6 @@ var app = (function () {
     		onMount,
     		OrganizationService,
     		invoices,
-    		selectedInvoice,
     		user,
     		router: page,
     		user_value,
@@ -5704,321 +5901,115 @@ var app = (function () {
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[3] = list[i];
+    	child_ctx[12] = list[i];
     	return child_ctx;
     }
 
-    // (65:2) {#if line_item.item_custom_fields[0] && line_item.item_custom_fields[0].value > 0}
-    function create_if_block(ctx) {
-    	let div8;
-    	let div0;
-    	let h4;
-    	let t0_value = /*line_item*/ ctx[3].name + "";
-    	let t0;
-    	let t1;
-    	let div7;
-    	let div6;
-    	let div1;
-    	let label0;
-    	let t3;
-    	let input0;
-    	let input0_value_value;
-    	let t4;
-    	let div2;
-    	let label1;
-    	let t6;
-    	let input1;
-    	let input1_value_value;
-    	let t7;
-    	let div3;
-    	let label2;
-    	let t9;
-    	let input2;
-    	let input2_value_value;
-    	let t10;
-    	let div4;
-    	let label3;
-    	let t12;
-    	let input3;
-    	let input3_value_value;
-    	let t13;
-    	let div5;
-    	let label4;
-    	let t15;
-    	let input4;
-    	let input4_value_value;
-    	let t16;
-    	let button;
-    	let t18;
-    	let p;
-    	let t20;
-    	let mounted;
-    	let dispose;
-
-    	const block = {
-    		c: function create() {
-    			div8 = element("div");
-    			div0 = element("div");
-    			h4 = element("h4");
-    			t0 = text(t0_value);
-    			t1 = space();
-    			div7 = element("div");
-    			div6 = element("div");
-    			div1 = element("div");
-    			label0 = element("label");
-    			label0.textContent = "Account Name";
-    			t3 = space();
-    			input0 = element("input");
-    			t4 = space();
-    			div2 = element("div");
-    			label1 = element("label");
-    			label1.textContent = "Quantity";
-    			t6 = space();
-    			input1 = element("input");
-    			t7 = space();
-    			div3 = element("div");
-    			label2 = element("label");
-    			label2.textContent = "Rate";
-    			t9 = space();
-    			input2 = element("input");
-    			t10 = space();
-    			div4 = element("div");
-    			label3 = element("label");
-    			label3.textContent = "Item Total";
-    			t12 = space();
-    			input3 = element("input");
-    			t13 = space();
-    			div5 = element("div");
-    			label4 = element("label");
-    			label4.textContent = "Deferral Term";
-    			t15 = space();
-    			input4 = element("input");
-    			t16 = space();
-    			button = element("button");
-    			button.textContent = "Create Deferral Schedule";
-    			t18 = space();
-    			p = element("p");
-    			p.textContent = "No Deferral Schedule has been generated for this item";
-    			t20 = space();
-    			add_location(h4, file$3, 66, 31, 2811);
-    			attr_dev(div0, "class", "card-header");
-    			add_location(div0, file$3, 66, 6, 2786);
-    			attr_dev(label0, "for", "exampleInputPassword1");
-    			attr_dev(label0, "class", "form-label");
-    			add_location(label0, file$3, 70, 12, 2952);
-    			attr_dev(input0, "type", "text");
-    			attr_dev(input0, "class", "form-control");
-    			input0.value = input0_value_value = /*line_item*/ ctx[3].account_name;
-    			input0.readOnly = true;
-    			attr_dev(input0, "id", "exampleInputPassword1");
-    			add_location(input0, file$3, 71, 12, 3039);
-    			attr_dev(div1, "class", "form-group");
-    			add_location(div1, file$3, 69, 10, 2915);
-    			attr_dev(label1, "for", "exampleInputPassword1");
-    			attr_dev(label1, "class", "form-label");
-    			add_location(label1, file$3, 74, 12, 3213);
-    			attr_dev(input1, "type", "text");
-    			attr_dev(input1, "class", "form-control");
-    			input1.value = input1_value_value = /*line_item*/ ctx[3].quantity;
-    			input1.readOnly = true;
-    			attr_dev(input1, "id", "exampleInputPassword1");
-    			add_location(input1, file$3, 75, 12, 3296);
-    			attr_dev(div2, "class", "form-group");
-    			add_location(div2, file$3, 73, 10, 3176);
-    			attr_dev(label2, "for", "exampleInputPassword1");
-    			attr_dev(label2, "class", "form-label");
-    			add_location(label2, file$3, 78, 12, 3466);
-    			attr_dev(input2, "type", "text");
-    			attr_dev(input2, "class", "form-control");
-    			input2.value = input2_value_value = /*line_item*/ ctx[3].rate;
-    			input2.readOnly = true;
-    			attr_dev(input2, "id", "exampleInputPassword1");
-    			add_location(input2, file$3, 79, 12, 3545);
-    			attr_dev(div3, "class", "form-group");
-    			add_location(div3, file$3, 77, 10, 3429);
-    			attr_dev(label3, "for", "exampleInputPassword1");
-    			attr_dev(label3, "class", "form-label");
-    			add_location(label3, file$3, 82, 12, 3711);
-    			attr_dev(input3, "type", "text");
-    			attr_dev(input3, "class", "form-control");
-    			input3.value = input3_value_value = /*line_item*/ ctx[3].item_total;
-    			input3.readOnly = true;
-    			attr_dev(input3, "id", "exampleInputPassword1");
-    			add_location(input3, file$3, 83, 12, 3796);
-    			attr_dev(div4, "class", "form-group");
-    			add_location(div4, file$3, 81, 10, 3674);
-    			attr_dev(label4, "for", "exampleInputPassword1");
-    			attr_dev(label4, "class", "form-label");
-    			add_location(label4, file$3, 86, 12, 3968);
-    			attr_dev(input4, "type", "text");
-    			attr_dev(input4, "class", "form-control");
-    			input4.value = input4_value_value = /*line_item*/ ctx[3].item_custom_fields[0].value;
-    			input4.readOnly = true;
-    			attr_dev(input4, "id", "exampleInputPassword1");
-    			add_location(input4, file$3, 87, 12, 4056);
-    			attr_dev(div5, "class", "form-group");
-    			add_location(div5, file$3, 85, 10, 3931);
-    			attr_dev(button, "type", "button");
-    			attr_dev(button, "class", "btn btn-primary mt-3");
-    			add_location(button, file$3, 89, 10, 4208);
-    			attr_dev(p, "class", "text-danger mt-3");
-    			add_location(p, file$3, 90, 10, 4350);
-    			attr_dev(div6, "class", "card-text");
-    			add_location(div6, file$3, 68, 8, 2881);
-    			attr_dev(div7, "class", "card-body");
-    			add_location(div7, file$3, 67, 6, 2849);
-    			attr_dev(div8, "class", "card border-secondary mb-3 m-auto mt-3");
-    			set_style(div8, "max-width", "50vw");
-    			add_location(div8, file$3, 65, 4, 2702);
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, div8, anchor);
-    			append_dev(div8, div0);
-    			append_dev(div0, h4);
-    			append_dev(h4, t0);
-    			append_dev(div8, t1);
-    			append_dev(div8, div7);
-    			append_dev(div7, div6);
-    			append_dev(div6, div1);
-    			append_dev(div1, label0);
-    			append_dev(div1, t3);
-    			append_dev(div1, input0);
-    			append_dev(div6, t4);
-    			append_dev(div6, div2);
-    			append_dev(div2, label1);
-    			append_dev(div2, t6);
-    			append_dev(div2, input1);
-    			append_dev(div6, t7);
-    			append_dev(div6, div3);
-    			append_dev(div3, label2);
-    			append_dev(div3, t9);
-    			append_dev(div3, input2);
-    			append_dev(div6, t10);
-    			append_dev(div6, div4);
-    			append_dev(div4, label3);
-    			append_dev(div4, t12);
-    			append_dev(div4, input3);
-    			append_dev(div6, t13);
-    			append_dev(div6, div5);
-    			append_dev(div5, label4);
-    			append_dev(div5, t15);
-    			append_dev(div5, input4);
-    			append_dev(div6, t16);
-    			append_dev(div6, button);
-    			append_dev(div6, t18);
-    			append_dev(div6, p);
-    			append_dev(div8, t20);
-
-    			if (!mounted) {
-    				dispose = listen_dev(
-    					button,
-    					"click",
-    					function () {
-    						if (is_function(/*createDeferralSchedule*/ ctx[1](/*line_item*/ ctx[3]))) /*createDeferralSchedule*/ ctx[1](/*line_item*/ ctx[3]).apply(this, arguments);
-    					},
-    					false,
-    					false,
-    					false
-    				);
-
-    				mounted = true;
-    			}
-    		},
-    		p: function update(new_ctx, dirty) {
-    			ctx = new_ctx;
-    			if (dirty & /*selectedInvoice_value*/ 1 && t0_value !== (t0_value = /*line_item*/ ctx[3].name + "")) set_data_dev(t0, t0_value);
-
-    			if (dirty & /*selectedInvoice_value*/ 1 && input0_value_value !== (input0_value_value = /*line_item*/ ctx[3].account_name) && input0.value !== input0_value_value) {
-    				prop_dev(input0, "value", input0_value_value);
-    			}
-
-    			if (dirty & /*selectedInvoice_value*/ 1 && input1_value_value !== (input1_value_value = /*line_item*/ ctx[3].quantity) && input1.value !== input1_value_value) {
-    				prop_dev(input1, "value", input1_value_value);
-    			}
-
-    			if (dirty & /*selectedInvoice_value*/ 1 && input2_value_value !== (input2_value_value = /*line_item*/ ctx[3].rate) && input2.value !== input2_value_value) {
-    				prop_dev(input2, "value", input2_value_value);
-    			}
-
-    			if (dirty & /*selectedInvoice_value*/ 1 && input3_value_value !== (input3_value_value = /*line_item*/ ctx[3].item_total) && input3.value !== input3_value_value) {
-    				prop_dev(input3, "value", input3_value_value);
-    			}
-
-    			if (dirty & /*selectedInvoice_value*/ 1 && input4_value_value !== (input4_value_value = /*line_item*/ ctx[3].item_custom_fields[0].value) && input4.value !== input4_value_value) {
-    				prop_dev(input4, "value", input4_value_value);
-    			}
-    		},
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div8);
-    			mounted = false;
-    			dispose();
-    		}
-    	};
+    // (1:0) <script>   import { onMount }
+    function create_catch_block(ctx) {
+    	const block = { c: noop, m: noop, p: noop, d: noop };
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_if_block.name,
-    		type: "if",
-    		source: "(65:2) {#if line_item.item_custom_fields[0] && line_item.item_custom_fields[0].value > 0}",
+    		id: create_catch_block.name,
+    		type: "catch",
+    		source: "(1:0) <script>   import { onMount }",
     		ctx
     	});
 
     	return block;
     }
 
-    // (64:2) {#each selectedInvoice_value.line_items as line_item}
-    function create_each_block$2(ctx) {
+    // (84:0) {:then}
+    function create_then_block(ctx) {
     	let if_block_anchor;
-    	let if_block = /*line_item*/ ctx[3].item_custom_fields[0] && /*line_item*/ ctx[3].item_custom_fields[0].value > 0 && create_if_block(ctx);
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*selectedInvoice*/ ctx[1].line_items) return create_if_block;
+    		return create_else_block_1;
+    	}
+
+    	let current_block_type = select_block_type(ctx);
+    	let if_block = current_block_type(ctx);
 
     	const block = {
     		c: function create() {
-    			if (if_block) if_block.c();
+    			if_block.c();
     			if_block_anchor = empty();
     		},
     		m: function mount(target, anchor) {
-    			if (if_block) if_block.m(target, anchor);
+    			if_block.m(target, anchor);
     			insert_dev(target, if_block_anchor, anchor);
     		},
     		p: function update(ctx, dirty) {
-    			if (/*line_item*/ ctx[3].item_custom_fields[0] && /*line_item*/ ctx[3].item_custom_fields[0].value > 0) {
+    			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
+    				if_block.p(ctx, dirty);
+    			} else {
+    				if_block.d(1);
+    				if_block = current_block_type(ctx);
+
     				if (if_block) {
-    					if_block.p(ctx, dirty);
-    				} else {
-    					if_block = create_if_block(ctx);
     					if_block.c();
     					if_block.m(if_block_anchor.parentNode, if_block_anchor);
     				}
-    			} else if (if_block) {
-    				if_block.d(1);
-    				if_block = null;
     			}
     		},
     		d: function destroy(detaching) {
-    			if (if_block) if_block.d(detaching);
+    			if_block.d(detaching);
     			if (detaching) detach_dev(if_block_anchor);
     		}
     	};
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block$2.name,
-    		type: "each",
-    		source: "(64:2) {#each selectedInvoice_value.line_items as line_item}",
+    		id: create_then_block.name,
+    		type: "then",
+    		source: "(84:0) {:then}",
     		ctx
     	});
 
     	return block;
     }
 
-    function create_fragment$3(ctx) {
+    // (155:0) {:else}
+    function create_else_block_1(ctx) {
+    	let h1;
+
+    	const block = {
+    		c: function create() {
+    			h1 = element("h1");
+    			h1.textContent = "Loading...";
+    			add_location(h1, file$3, 155, 0, 6415);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h1, anchor);
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h1);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_else_block_1.name,
+    		type: "else",
+    		source: "(155:0) {:else}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (85:0) {#if selectedInvoice.line_items}
+    function create_if_block(ctx) {
     	let div7;
     	let input0;
     	let t0;
     	let div0;
     	let h4;
     	let t1;
-    	let t2_value = /*selectedInvoice_value*/ ctx[0].invoice_number + "";
+    	let t2_value = /*selectedInvoice*/ ctx[1].invoice_number + "";
     	let t2;
     	let t3;
     	let div6;
@@ -6048,7 +6039,7 @@ var app = (function () {
     	let input4_value_value;
     	let t15;
     	let each_1_anchor;
-    	let each_value = /*selectedInvoice_value*/ ctx[0].line_items;
+    	let each_value = /*selectedInvoice*/ ctx[1].line_items;
     	validate_each_argument(each_value);
     	let each_blocks = [];
 
@@ -6100,64 +6091,61 @@ var app = (function () {
     			each_1_anchor = empty();
     			attr_dev(input0, "type", "hidden");
     			attr_dev(input0, "name", "invoice");
-    			add_location(input0, file$3, 39, 4, 1263);
-    			add_location(h4, file$3, 40, 29, 1329);
+    			add_location(input0, file$3, 86, 2, 2750);
+    			add_location(h4, file$3, 87, 27, 2814);
     			attr_dev(div0, "class", "card-header");
-    			add_location(div0, file$3, 40, 4, 1304);
+    			add_location(div0, file$3, 87, 2, 2789);
     			attr_dev(label0, "for", "exampleInputPassword1");
     			attr_dev(label0, "class", "form-label mt-4");
-    			add_location(label0, file$3, 44, 10, 1492);
+    			add_location(label0, file$3, 91, 8, 2963);
     			attr_dev(input1, "type", "text");
     			attr_dev(input1, "class", "form-control");
-    			input1.value = input1_value_value = /*selectedInvoice_value*/ ctx[0].customer_name;
+    			input1.value = input1_value_value = /*selectedInvoice*/ ctx[1].customer_name;
     			input1.readOnly = true;
     			attr_dev(input1, "id", "exampleInputPassword1");
-    			add_location(input1, file$3, 45, 10, 1583);
+    			add_location(input1, file$3, 92, 8, 3052);
     			attr_dev(div1, "class", "form-group");
-    			add_location(div1, file$3, 43, 8, 1457);
+    			add_location(div1, file$3, 90, 6, 2930);
     			attr_dev(label1, "for", "exampleInputPassword1");
     			attr_dev(label1, "class", "form-label mt-4");
-    			add_location(label1, file$3, 48, 12, 1766);
+    			add_location(label1, file$3, 95, 10, 3223);
     			attr_dev(input2, "type", "text");
     			attr_dev(input2, "class", "form-control");
-    			input2.value = input2_value_value = /*selectedInvoice_value*/ ctx[0].date;
+    			input2.value = input2_value_value = /*selectedInvoice*/ ctx[1].date;
     			input2.readOnly = true;
     			attr_dev(input2, "id", "exampleInputPassword1");
-    			add_location(input2, file$3, 49, 12, 1858);
+    			add_location(input2, file$3, 96, 10, 3313);
     			attr_dev(div2, "class", "form-group");
-    			add_location(div2, file$3, 47, 8, 1729);
+    			add_location(div2, file$3, 94, 6, 3188);
     			attr_dev(label2, "for", "exampleInputPassword1");
     			attr_dev(label2, "class", "form-label mt-4");
-    			add_location(label2, file$3, 52, 12, 2032);
+    			add_location(label2, file$3, 99, 10, 3475);
     			attr_dev(input3, "type", "text");
     			attr_dev(input3, "class", "form-control");
-    			input3.value = input3_value_value = /*selectedInvoice_value*/ ctx[0].date;
+    			input3.value = input3_value_value = /*selectedInvoice*/ ctx[1].date;
     			input3.readOnly = true;
     			attr_dev(input3, "id", "exampleInputPassword1");
-    			add_location(input3, file$3, 53, 12, 2126);
+    			add_location(input3, file$3, 100, 10, 3567);
     			attr_dev(div3, "class", "form-group");
-    			add_location(div3, file$3, 51, 8, 1995);
+    			add_location(div3, file$3, 98, 6, 3440);
     			attr_dev(label3, "for", "exampleInputPassword1");
     			attr_dev(label3, "class", "form-label mt-4");
-    			add_location(label3, file$3, 56, 12, 2300);
+    			add_location(label3, file$3, 103, 10, 3729);
     			attr_dev(input4, "type", "text");
     			attr_dev(input4, "class", "form-control");
-    			input4.value = input4_value_value = /*selectedInvoice_value*/ ctx[0].date;
+    			input4.value = input4_value_value = /*selectedInvoice*/ ctx[1].date;
     			input4.readOnly = true;
     			attr_dev(input4, "id", "exampleInputPassword1");
-    			add_location(input4, file$3, 57, 12, 2393);
+    			add_location(input4, file$3, 104, 10, 3820);
     			attr_dev(div4, "class", "form-group");
-    			add_location(div4, file$3, 55, 8, 2263);
+    			add_location(div4, file$3, 102, 6, 3694);
     			attr_dev(div5, "class", "card-text");
-    			add_location(div5, file$3, 42, 6, 1425);
+    			add_location(div5, file$3, 89, 4, 2900);
     			attr_dev(div6, "class", "card-body");
-    			add_location(div6, file$3, 41, 4, 1395);
+    			add_location(div6, file$3, 88, 2, 2872);
     			attr_dev(div7, "class", "card border-secondary mb-3 m-auto mt-3");
     			set_style(div7, "max-width", "50vw");
-    			add_location(div7, file$3, 38, 0, 1181);
-    		},
-    		l: function claim(nodes) {
-    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    			add_location(div7, file$3, 85, 0, 2670);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div7, anchor);
@@ -6197,27 +6185,27 @@ var app = (function () {
 
     			insert_dev(target, each_1_anchor, anchor);
     		},
-    		p: function update(ctx, [dirty]) {
-    			if (dirty & /*selectedInvoice_value*/ 1 && t2_value !== (t2_value = /*selectedInvoice_value*/ ctx[0].invoice_number + "")) set_data_dev(t2, t2_value);
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*selectedInvoice*/ 2 && t2_value !== (t2_value = /*selectedInvoice*/ ctx[1].invoice_number + "")) set_data_dev(t2, t2_value);
 
-    			if (dirty & /*selectedInvoice_value*/ 1 && input1_value_value !== (input1_value_value = /*selectedInvoice_value*/ ctx[0].customer_name) && input1.value !== input1_value_value) {
+    			if (dirty & /*selectedInvoice*/ 2 && input1_value_value !== (input1_value_value = /*selectedInvoice*/ ctx[1].customer_name) && input1.value !== input1_value_value) {
     				prop_dev(input1, "value", input1_value_value);
     			}
 
-    			if (dirty & /*selectedInvoice_value*/ 1 && input2_value_value !== (input2_value_value = /*selectedInvoice_value*/ ctx[0].date) && input2.value !== input2_value_value) {
+    			if (dirty & /*selectedInvoice*/ 2 && input2_value_value !== (input2_value_value = /*selectedInvoice*/ ctx[1].date) && input2.value !== input2_value_value) {
     				prop_dev(input2, "value", input2_value_value);
     			}
 
-    			if (dirty & /*selectedInvoice_value*/ 1 && input3_value_value !== (input3_value_value = /*selectedInvoice_value*/ ctx[0].date) && input3.value !== input3_value_value) {
+    			if (dirty & /*selectedInvoice*/ 2 && input3_value_value !== (input3_value_value = /*selectedInvoice*/ ctx[1].date) && input3.value !== input3_value_value) {
     				prop_dev(input3, "value", input3_value_value);
     			}
 
-    			if (dirty & /*selectedInvoice_value*/ 1 && input4_value_value !== (input4_value_value = /*selectedInvoice_value*/ ctx[0].date) && input4.value !== input4_value_value) {
+    			if (dirty & /*selectedInvoice*/ 2 && input4_value_value !== (input4_value_value = /*selectedInvoice*/ ctx[1].date) && input4.value !== input4_value_value) {
     				prop_dev(input4, "value", input4_value_value);
     			}
 
-    			if (dirty & /*createDeferralSchedule, selectedInvoice_value*/ 3) {
-    				each_value = /*selectedInvoice_value*/ ctx[0].line_items;
+    			if (dirty & /*loadingDeferral, createDeferralSchedule, selectedInvoice, formatDate, runDeferral*/ 30) {
+    				each_value = /*selectedInvoice*/ ctx[1].line_items;
     				validate_each_argument(each_value);
     				let i;
 
@@ -6240,13 +6228,624 @@ var app = (function () {
     				each_blocks.length = each_value.length;
     			}
     		},
-    		i: noop,
-    		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div7);
     			if (detaching) detach_dev(t15);
     			destroy_each(each_blocks, detaching);
     			if (detaching) detach_dev(each_1_anchor);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(85:0) {#if selectedInvoice.line_items}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (111:0) {#if line_item.item_custom_fields[0] && line_item.item_custom_fields[0].value > 0}
+    function create_if_block_1(ctx) {
+    	let div8;
+    	let div0;
+    	let h4;
+    	let t0_value = /*line_item*/ ctx[12].name + "";
+    	let t0;
+    	let t1;
+    	let div7;
+    	let div6;
+    	let div1;
+    	let label0;
+    	let t3;
+    	let input0;
+    	let input0_value_value;
+    	let t4;
+    	let div2;
+    	let label1;
+    	let t6;
+    	let input1;
+    	let input1_value_value;
+    	let t7;
+    	let div3;
+    	let label2;
+    	let t9;
+    	let input2;
+    	let input2_value_value;
+    	let t10;
+    	let div4;
+    	let label3;
+    	let t12;
+    	let input3;
+    	let input3_value_value;
+    	let t13;
+    	let div5;
+    	let label4;
+    	let t15;
+    	let input4;
+    	let input4_value_value;
+    	let t16;
+    	let t17;
+    	let t18;
+
+    	function select_block_type_1(ctx, dirty) {
+    		if (!/*line_item*/ ctx[12].scheduledDeferral) return create_if_block_3;
+    		return create_else_block;
+    	}
+
+    	let current_block_type = select_block_type_1(ctx);
+    	let if_block0 = current_block_type(ctx);
+    	let if_block1 = /*loadingDeferral*/ ctx[2] && create_if_block_2(ctx);
+
+    	const block = {
+    		c: function create() {
+    			div8 = element("div");
+    			div0 = element("div");
+    			h4 = element("h4");
+    			t0 = text(t0_value);
+    			t1 = space();
+    			div7 = element("div");
+    			div6 = element("div");
+    			div1 = element("div");
+    			label0 = element("label");
+    			label0.textContent = "Account Name";
+    			t3 = space();
+    			input0 = element("input");
+    			t4 = space();
+    			div2 = element("div");
+    			label1 = element("label");
+    			label1.textContent = "Quantity";
+    			t6 = space();
+    			input1 = element("input");
+    			t7 = space();
+    			div3 = element("div");
+    			label2 = element("label");
+    			label2.textContent = "Rate";
+    			t9 = space();
+    			input2 = element("input");
+    			t10 = space();
+    			div4 = element("div");
+    			label3 = element("label");
+    			label3.textContent = "Item Total";
+    			t12 = space();
+    			input3 = element("input");
+    			t13 = space();
+    			div5 = element("div");
+    			label4 = element("label");
+    			label4.textContent = "Deferral Term";
+    			t15 = space();
+    			input4 = element("input");
+    			t16 = space();
+    			if_block0.c();
+    			t17 = space();
+    			if (if_block1) if_block1.c();
+    			t18 = space();
+    			add_location(h4, file$3, 112, 29, 4209);
+    			attr_dev(div0, "class", "card-header");
+    			add_location(div0, file$3, 112, 4, 4184);
+    			attr_dev(label0, "for", "exampleInputPassword1");
+    			attr_dev(label0, "class", "form-label");
+    			add_location(label0, file$3, 116, 10, 4342);
+    			attr_dev(input0, "type", "text");
+    			attr_dev(input0, "class", "form-control");
+    			input0.value = input0_value_value = /*line_item*/ ctx[12].account_name;
+    			input0.readOnly = true;
+    			attr_dev(input0, "id", "exampleInputPassword1");
+    			add_location(input0, file$3, 117, 10, 4427);
+    			attr_dev(div1, "class", "form-group");
+    			add_location(div1, file$3, 115, 8, 4307);
+    			attr_dev(label1, "for", "exampleInputPassword1");
+    			attr_dev(label1, "class", "form-label");
+    			add_location(label1, file$3, 120, 10, 4595);
+    			attr_dev(input1, "type", "text");
+    			attr_dev(input1, "class", "form-control");
+    			input1.value = input1_value_value = /*line_item*/ ctx[12].quantity;
+    			input1.readOnly = true;
+    			attr_dev(input1, "id", "exampleInputPassword1");
+    			add_location(input1, file$3, 121, 10, 4676);
+    			attr_dev(div2, "class", "form-group");
+    			add_location(div2, file$3, 119, 8, 4560);
+    			attr_dev(label2, "for", "exampleInputPassword1");
+    			attr_dev(label2, "class", "form-label");
+    			add_location(label2, file$3, 124, 10, 4840);
+    			attr_dev(input2, "type", "text");
+    			attr_dev(input2, "class", "form-control");
+    			input2.value = input2_value_value = /*line_item*/ ctx[12].rate;
+    			input2.readOnly = true;
+    			attr_dev(input2, "id", "exampleInputPassword1");
+    			add_location(input2, file$3, 125, 10, 4917);
+    			attr_dev(div3, "class", "form-group");
+    			add_location(div3, file$3, 123, 8, 4805);
+    			attr_dev(label3, "for", "exampleInputPassword1");
+    			attr_dev(label3, "class", "form-label");
+    			add_location(label3, file$3, 128, 10, 5077);
+    			attr_dev(input3, "type", "text");
+    			attr_dev(input3, "class", "form-control");
+    			input3.value = input3_value_value = /*line_item*/ ctx[12].item_total;
+    			input3.readOnly = true;
+    			attr_dev(input3, "id", "exampleInputPassword1");
+    			add_location(input3, file$3, 129, 10, 5160);
+    			attr_dev(div4, "class", "form-group");
+    			add_location(div4, file$3, 127, 8, 5042);
+    			attr_dev(label4, "for", "exampleInputPassword1");
+    			attr_dev(label4, "class", "form-label");
+    			add_location(label4, file$3, 132, 10, 5326);
+    			attr_dev(input4, "type", "text");
+    			attr_dev(input4, "class", "form-control");
+    			input4.value = input4_value_value = /*line_item*/ ctx[12].item_custom_fields[0].value;
+    			input4.readOnly = true;
+    			attr_dev(input4, "id", "exampleInputPassword1");
+    			add_location(input4, file$3, 133, 10, 5412);
+    			attr_dev(div5, "class", "form-group");
+    			add_location(div5, file$3, 131, 8, 5291);
+    			attr_dev(div6, "class", "card-text");
+    			add_location(div6, file$3, 114, 6, 4275);
+    			attr_dev(div7, "class", "card-body");
+    			add_location(div7, file$3, 113, 4, 4245);
+    			attr_dev(div8, "class", "card border-secondary mb-3 m-auto mt-3");
+    			set_style(div8, "max-width", "50vw");
+    			add_location(div8, file$3, 111, 2, 4102);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div8, anchor);
+    			append_dev(div8, div0);
+    			append_dev(div0, h4);
+    			append_dev(h4, t0);
+    			append_dev(div8, t1);
+    			append_dev(div8, div7);
+    			append_dev(div7, div6);
+    			append_dev(div6, div1);
+    			append_dev(div1, label0);
+    			append_dev(div1, t3);
+    			append_dev(div1, input0);
+    			append_dev(div6, t4);
+    			append_dev(div6, div2);
+    			append_dev(div2, label1);
+    			append_dev(div2, t6);
+    			append_dev(div2, input1);
+    			append_dev(div6, t7);
+    			append_dev(div6, div3);
+    			append_dev(div3, label2);
+    			append_dev(div3, t9);
+    			append_dev(div3, input2);
+    			append_dev(div6, t10);
+    			append_dev(div6, div4);
+    			append_dev(div4, label3);
+    			append_dev(div4, t12);
+    			append_dev(div4, input3);
+    			append_dev(div6, t13);
+    			append_dev(div6, div5);
+    			append_dev(div5, label4);
+    			append_dev(div5, t15);
+    			append_dev(div5, input4);
+    			append_dev(div6, t16);
+    			if_block0.m(div6, null);
+    			append_dev(div6, t17);
+    			if (if_block1) if_block1.m(div6, null);
+    			append_dev(div8, t18);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*selectedInvoice*/ 2 && t0_value !== (t0_value = /*line_item*/ ctx[12].name + "")) set_data_dev(t0, t0_value);
+
+    			if (dirty & /*selectedInvoice*/ 2 && input0_value_value !== (input0_value_value = /*line_item*/ ctx[12].account_name) && input0.value !== input0_value_value) {
+    				prop_dev(input0, "value", input0_value_value);
+    			}
+
+    			if (dirty & /*selectedInvoice*/ 2 && input1_value_value !== (input1_value_value = /*line_item*/ ctx[12].quantity) && input1.value !== input1_value_value) {
+    				prop_dev(input1, "value", input1_value_value);
+    			}
+
+    			if (dirty & /*selectedInvoice*/ 2 && input2_value_value !== (input2_value_value = /*line_item*/ ctx[12].rate) && input2.value !== input2_value_value) {
+    				prop_dev(input2, "value", input2_value_value);
+    			}
+
+    			if (dirty & /*selectedInvoice*/ 2 && input3_value_value !== (input3_value_value = /*line_item*/ ctx[12].item_total) && input3.value !== input3_value_value) {
+    				prop_dev(input3, "value", input3_value_value);
+    			}
+
+    			if (dirty & /*selectedInvoice*/ 2 && input4_value_value !== (input4_value_value = /*line_item*/ ctx[12].item_custom_fields[0].value) && input4.value !== input4_value_value) {
+    				prop_dev(input4, "value", input4_value_value);
+    			}
+
+    			if (current_block_type === (current_block_type = select_block_type_1(ctx)) && if_block0) {
+    				if_block0.p(ctx, dirty);
+    			} else {
+    				if_block0.d(1);
+    				if_block0 = current_block_type(ctx);
+
+    				if (if_block0) {
+    					if_block0.c();
+    					if_block0.m(div6, t17);
+    				}
+    			}
+
+    			if (/*loadingDeferral*/ ctx[2]) {
+    				if (if_block1) ; else {
+    					if_block1 = create_if_block_2(ctx);
+    					if_block1.c();
+    					if_block1.m(div6, null);
+    				}
+    			} else if (if_block1) {
+    				if_block1.d(1);
+    				if_block1 = null;
+    			}
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div8);
+    			if_block0.d();
+    			if (if_block1) if_block1.d();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_1.name,
+    		type: "if",
+    		source: "(111:0) {#if line_item.item_custom_fields[0] && line_item.item_custom_fields[0].value > 0}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (140:8) {:else}
+    function create_else_block(ctx) {
+    	let t0;
+    	let p0;
+    	let t1;
+    	let t2_value = formatDate(/*line_item*/ ctx[12].scheduledDeferral.deferrals_next_run) + "";
+    	let t2;
+    	let t3;
+    	let p1;
+    	let if_block = /*line_item*/ ctx[12].scheduledDeferral.needsRun && create_if_block_4(ctx);
+
+    	const block = {
+    		c: function create() {
+    			if (if_block) if_block.c();
+    			t0 = space();
+    			p0 = element("p");
+    			t1 = text("Next Deferral Date: ");
+    			t2 = text(t2_value);
+    			t3 = space();
+    			p1 = element("p");
+    			p1.textContent = "A deferral schedule has been made for this item!";
+    			add_location(p0, file$3, 143, 8, 6084);
+    			attr_dev(p1, "class", "text-success mt-3");
+    			add_location(p1, file$3, 144, 8, 6180);
+    		},
+    		m: function mount(target, anchor) {
+    			if (if_block) if_block.m(target, anchor);
+    			insert_dev(target, t0, anchor);
+    			insert_dev(target, p0, anchor);
+    			append_dev(p0, t1);
+    			append_dev(p0, t2);
+    			insert_dev(target, t3, anchor);
+    			insert_dev(target, p1, anchor);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (/*line_item*/ ctx[12].scheduledDeferral.needsRun) {
+    				if (if_block) {
+    					if_block.p(ctx, dirty);
+    				} else {
+    					if_block = create_if_block_4(ctx);
+    					if_block.c();
+    					if_block.m(t0.parentNode, t0);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
+
+    			if (dirty & /*selectedInvoice*/ 2 && t2_value !== (t2_value = formatDate(/*line_item*/ ctx[12].scheduledDeferral.deferrals_next_run) + "")) set_data_dev(t2, t2_value);
+    		},
+    		d: function destroy(detaching) {
+    			if (if_block) if_block.d(detaching);
+    			if (detaching) detach_dev(t0);
+    			if (detaching) detach_dev(p0);
+    			if (detaching) detach_dev(t3);
+    			if (detaching) detach_dev(p1);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_else_block.name,
+    		type: "else",
+    		source: "(140:8) {:else}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (137:8) {#if !line_item.scheduledDeferral }
+    function create_if_block_3(ctx) {
+    	let button;
+    	let t1;
+    	let p;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			button = element("button");
+    			button.textContent = "Create Deferral Schedule";
+    			t1 = space();
+    			p = element("p");
+    			p.textContent = "No Deferral Schedule has been generated for this item";
+    			attr_dev(button, "type", "button");
+    			attr_dev(button, "class", "btn btn-primary mt-3");
+    			add_location(button, file$3, 137, 8, 5623);
+    			attr_dev(p, "class", "text-danger mt-3");
+    			add_location(p, file$3, 138, 8, 5763);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, button, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, p, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(
+    					button,
+    					"click",
+    					function () {
+    						if (is_function(/*createDeferralSchedule*/ ctx[4](/*line_item*/ ctx[12]))) /*createDeferralSchedule*/ ctx[4](/*line_item*/ ctx[12]).apply(this, arguments);
+    					},
+    					false,
+    					false,
+    					false
+    				);
+
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(button);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(p);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_3.name,
+    		type: "if",
+    		source: "(137:8) {#if !line_item.scheduledDeferral }",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (141:8) {#if line_item.scheduledDeferral.needsRun }
+    function create_if_block_4(ctx) {
+    	let button;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			button = element("button");
+    			button.textContent = "Run Deferral";
+    			attr_dev(button, "type", "button");
+    			attr_dev(button, "class", "btn btn-danger mt-3");
+    			add_location(button, file$3, 141, 10, 5933);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, button, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(
+    					button,
+    					"click",
+    					function () {
+    						if (is_function(/*runDeferral*/ ctx[3](/*line_item*/ ctx[12].scheduledDeferral.id))) /*runDeferral*/ ctx[3](/*line_item*/ ctx[12].scheduledDeferral.id).apply(this, arguments);
+    					},
+    					false,
+    					false,
+    					false
+    				);
+
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(button);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_4.name,
+    		type: "if",
+    		source: "(141:8) {#if line_item.scheduledDeferral.needsRun }",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (147:8) {#if loadingDeferral }
+    function create_if_block_2(ctx) {
+    	let p;
+
+    	const block = {
+    		c: function create() {
+    			p = element("p");
+    			p.textContent = "Running Deferral.....";
+    			add_location(p, file$3, 147, 10, 6317);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_2.name,
+    		type: "if",
+    		source: "(147:8) {#if loadingDeferral }",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (110:0) {#each selectedInvoice.line_items as line_item}
+    function create_each_block$2(ctx) {
+    	let if_block_anchor;
+    	let if_block = /*line_item*/ ctx[12].item_custom_fields[0] && /*line_item*/ ctx[12].item_custom_fields[0].value > 0 && create_if_block_1(ctx);
+
+    	const block = {
+    		c: function create() {
+    			if (if_block) if_block.c();
+    			if_block_anchor = empty();
+    		},
+    		m: function mount(target, anchor) {
+    			if (if_block) if_block.m(target, anchor);
+    			insert_dev(target, if_block_anchor, anchor);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (/*line_item*/ ctx[12].item_custom_fields[0] && /*line_item*/ ctx[12].item_custom_fields[0].value > 0) {
+    				if (if_block) {
+    					if_block.p(ctx, dirty);
+    				} else {
+    					if_block = create_if_block_1(ctx);
+    					if_block.c();
+    					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
+    		},
+    		d: function destroy(detaching) {
+    			if (if_block) if_block.d(detaching);
+    			if (detaching) detach_dev(if_block_anchor);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block$2.name,
+    		type: "each",
+    		source: "(110:0) {#each selectedInvoice.line_items as line_item}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (82:16)  <h1>Loading...</h1> {:then}
+    function create_pending_block(ctx) {
+    	let h1;
+
+    	const block = {
+    		c: function create() {
+    			h1 = element("h1");
+    			h1.textContent = "Loading...";
+    			add_location(h1, file$3, 82, 0, 2607);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h1, anchor);
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h1);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_pending_block.name,
+    		type: "pending",
+    		source: "(82:16)  <h1>Loading...</h1> {:then}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$3(ctx) {
+    	let await_block_anchor;
+    	let promise_1;
+
+    	let info = {
+    		ctx,
+    		current: null,
+    		token: null,
+    		hasCatch: false,
+    		pending: create_pending_block,
+    		then: create_then_block,
+    		catch: create_catch_block
+    	};
+
+    	handle_promise(promise_1 = /*promise*/ ctx[0], info);
+
+    	const block = {
+    		c: function create() {
+    			await_block_anchor = empty();
+    			info.block.c();
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, await_block_anchor, anchor);
+    			info.block.m(target, info.anchor = anchor);
+    			info.mount = () => await_block_anchor.parentNode;
+    			info.anchor = await_block_anchor;
+    		},
+    		p: function update(new_ctx, [dirty]) {
+    			ctx = new_ctx;
+    			info.ctx = ctx;
+
+    			if (dirty & /*promise*/ 1 && promise_1 !== (promise_1 = /*promise*/ ctx[0]) && handle_promise(promise_1, info)) ; else {
+    				update_await_block_branch(info, ctx, dirty);
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(await_block_anchor);
+    			info.block.d(detaching);
+    			info.token = null;
+    			info = null;
     		}
     	};
 
@@ -6261,25 +6860,55 @@ var app = (function () {
     	return block;
     }
 
+    function checkDate(date) {
+    	const d1 = new Date(date);
+    	const d2 = new Date();
+    	console.log(d1, d2);
+    }
+
+    function formatDate(date) {
+    	const words = date.split('T');
+    	checkDate(date);
+    	return words[0];
+    }
+
     function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Invoice', slots, []);
+    	let { params } = $$props;
     	let user_value;
 
     	user.subscribe(value => {
     		user_value = value;
     	});
 
-    	let selectedInvoice_value = {};
+    	let promise = setupPageData();
+    	let itemDeferrals = [];
+    	let selectedInvoice = {};
 
-    	selectedInvoice.subscribe(value => {
-    		$$invalidate(0, selectedInvoice_value = value);
-    	});
+    	async function setupPageData() {
+    		let response = await APIService.get("/api/zoho/invoice", { org_id: 1, invoice_id: params.id });
+    		$$invalidate(1, selectedInvoice = response.data);
+    		await setScheduledDeferral();
+
+    		//itemDeferrals = await getInvoiceItemDeferrals()
+    		console.log(selectedInvoice);
+    	}
+
+    	let loadingDeferral = false;
+    	let createPromise = {};
+
+    	async function runDeferral(id) {
+    		$$invalidate(2, loadingDeferral = true);
+    		createPromise = await APIService.post("/api/zoho/run_deferral", { "scheduled_deferral_id": id });
+    		$$invalidate(0, promise = setupPageData());
+    		$$invalidate(2, loadingDeferral = false);
+    	}
 
     	async function createDeferralSchedule(item) {
     		let deferralData = {
-    			"deferrals_invoice_id": selectedInvoice_value.invoice_id,
-    			"deferrals_item_id": item.item_id,
+    			"deferrals_invoice_id": selectedInvoice.invoice_id,
+    			"deferrals_item_id": item.line_item_id,
     			"deferrals_total_run_times": item.item_custom_fields[0].value,
     			"deferrals_times_ran": 0,
     			"deferrals_total_amount": item.item_total,
@@ -6290,46 +6919,90 @@ var app = (function () {
     			"OrganizationId": user_value.OrganizationId
     		};
 
-    		let response = await APIService.post("/api/organization/scheduled-deferrals", { data: deferralData });
-    		console.log(response);
+    		await APIService.post("/api/organization/scheduled-deferrals", { data: deferralData });
+    	}
+
+    	async function setScheduledDeferral() {
+    		console.log(selectedInvoice);
+
+    		for (let index = 0; index < selectedInvoice.line_items.length; index++) {
+    			const element = selectedInvoice.line_items[index];
+
+    			if (element.item_custom_fields && element.item_custom_fields[0]) {
+    				let scheduledDeferral = await getInvoiceItemDeferral(element.line_item_id);
+    				$$invalidate(1, selectedInvoice.line_items[index].scheduledDeferral = scheduledDeferral, selectedInvoice);
+    			}
+    		}
+    	}
+
+    	async function getInvoiceItemDeferral(item_id) {
+    		let response = await APIService.get("/api/organization/scheduled-deferrals", { by: 'item_id', item_id, type: 'one' });
+    		console.log("ScheduledDeferrals", response.data);
+    		return response.data;
     	}
 
     	onMount(async () => {
-    		console.log(selectedInvoice_value);
+    		$$invalidate(0, promise = setupPageData());
     	});
 
-    	const writable_props = [];
+    	const writable_props = ['params'];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1$1.warn(`<Invoice> was created with unknown prop '${key}'`);
     	});
 
+    	$$self.$$set = $$props => {
+    		if ('params' in $$props) $$invalidate(5, params = $$props.params);
+    	};
+
     	$$self.$capture_state = () => ({
     		onMount,
     		APIService,
-    		selectedInvoice,
     		user,
+    		params,
     		user_value,
-    		selectedInvoice_value,
-    		createDeferralSchedule
+    		promise,
+    		itemDeferrals,
+    		selectedInvoice,
+    		setupPageData,
+    		checkDate,
+    		formatDate,
+    		loadingDeferral,
+    		createPromise,
+    		runDeferral,
+    		createDeferralSchedule,
+    		setScheduledDeferral,
+    		getInvoiceItemDeferral
     	});
 
     	$$self.$inject_state = $$props => {
+    		if ('params' in $$props) $$invalidate(5, params = $$props.params);
     		if ('user_value' in $$props) user_value = $$props.user_value;
-    		if ('selectedInvoice_value' in $$props) $$invalidate(0, selectedInvoice_value = $$props.selectedInvoice_value);
+    		if ('promise' in $$props) $$invalidate(0, promise = $$props.promise);
+    		if ('itemDeferrals' in $$props) itemDeferrals = $$props.itemDeferrals;
+    		if ('selectedInvoice' in $$props) $$invalidate(1, selectedInvoice = $$props.selectedInvoice);
+    		if ('loadingDeferral' in $$props) $$invalidate(2, loadingDeferral = $$props.loadingDeferral);
+    		if ('createPromise' in $$props) createPromise = $$props.createPromise;
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [selectedInvoice_value, createDeferralSchedule];
+    	return [
+    		promise,
+    		selectedInvoice,
+    		loadingDeferral,
+    		runDeferral,
+    		createDeferralSchedule,
+    		params
+    	];
     }
 
     class Invoice extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$3, create_fragment$3, safe_not_equal, {});
+    		init(this, options, instance$3, create_fragment$3, safe_not_equal, { params: 5 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
@@ -6337,6 +7010,21 @@ var app = (function () {
     			options,
     			id: create_fragment$3.name
     		});
+
+    		const { ctx } = this.$$;
+    		const props = options.props || {};
+
+    		if (/*params*/ ctx[5] === undefined && !('params' in props)) {
+    			console_1$1.warn("<Invoice> was created without expected prop 'params'");
+    		}
+    	}
+
+    	get params() {
+    		throw new Error("<Invoice>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set params(value) {
+    		throw new Error("<Invoice>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
     }
 
@@ -7337,7 +8025,7 @@ var app = (function () {
     			t1 = space();
     			if (switch_instance) create_component(switch_instance.$$.fragment);
     			attr_dev(main, "class", "svelte-1hqtkhz");
-    			add_location(main, file, 45, 0, 1538);
+    			add_location(main, file, 45, 0, 1553);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -7422,7 +8110,7 @@ var app = (function () {
     	let params;
     	page('/organization/:id', SetParams, CheckNoUser, () => $$invalidate(0, page$1 = Organization));
     	page('/organizations', CheckNoUser, () => $$invalidate(0, page$1 = Organizations));
-    	page('/invoice', CheckNoUser, () => $$invalidate(0, page$1 = Invoice));
+    	page('/invoice/:id', SetParams, CheckNoUser, () => $$invalidate(0, page$1 = Invoice));
     	page('/invoices', CheckNoUser, () => $$invalidate(0, page$1 = Invoices));
     	page('/organization', CheckNoUser, () => $$invalidate(0, page$1 = MyOrganization));
     	page('/about', CheckNoUser, () => $$invalidate(0, page$1 = About));

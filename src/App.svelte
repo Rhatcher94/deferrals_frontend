@@ -22,7 +22,7 @@
 
 	router('/organization/:id', SetParams, CheckNoUser ,() => page = Organization)
 	router('/organizations', CheckNoUser ,() => page = Organizations)
-	router('/invoice', CheckNoUser ,() => page = Invoice)
+	router('/invoice/:id', SetParams, CheckNoUser ,() => page = Invoice)
 	router('/invoices', CheckNoUser ,() => page = Invoices)
 	router('/organization', CheckNoUser ,() => page = MyOrganization)
 	router('/about', CheckNoUser ,() => page = About)

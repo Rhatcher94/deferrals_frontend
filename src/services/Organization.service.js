@@ -32,8 +32,8 @@ const OrganizationService = {
         let response = await APIService.get("/api/organization/books/account", {"org_id": org_id, type: "many"})
         return response.data
     },
-    addBooksAccount: async function (books_account_code, org_id) {
-        let response = await APIService.post("/api/organization/books/account", {data: {books_account_code: books_account_code, org_id: org_id}})
+    addBooksAccount: async function (books_account_code, books_account_type, org_id) {
+        let response = await APIService.post("/api/organization/books/account", {data: {books_account_type: books_account_type, books_account_code: books_account_code, org_id: org_id}})
         ShowMessage(response, "Your Books Account has been added")
         return response.data
     },
